@@ -27,6 +27,17 @@ export default function Navbar({ currentPath = '/', selectedCategory = 'all', on
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentBrandIndex, setCurrentBrandIndex] = useState(0);
   const [categories, setCategories] = useState([]);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  // Monitor window scroll to activate light glass theme across entire navbar
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Fetch dynamic categories from database
   useEffect(() => {
@@ -83,7 +94,7 @@ export default function Navbar({ currentPath = '/', selectedCategory = 'all', on
 
   return (
     <>
-      <header className="navbar">
+      <header className={`navbar ${isScrolled ? 'scrolled' : ''}`}>
         <div className="nav-container">
           {/* Top-Left: Brand Emblem & Name */}
           <a
