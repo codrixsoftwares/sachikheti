@@ -1003,17 +1003,17 @@ export default function AdminDashboard({ onClose }) {
 
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label" style={{ fontSize: '0.82rem' }}>
-                    Supabase Public "anon" API Key *
+                    Supabase Publishable / Anon API Key *
                   </label>
                   <input
                     type="password"
                     value={supabaseForm.anonKey}
                     onChange={(e) => setSupabaseForm({ ...supabaseForm, anonKey: e.target.value })}
                     className="form-input"
-                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    placeholder="sb_publishable_... or eyJhbGciOi..."
                   />
                   <span style={{ fontSize: '0.74rem', color: '#7A8B80', marginTop: '4px', display: 'block' }}>
-                    This key is safe for client-side uploads when paired with public storage bucket policies.
+                    Copy the VITE_SUPABASE_PUBLISHABLE_KEY from your Supabase Connect dialog.
                   </span>
                 </div>
 
