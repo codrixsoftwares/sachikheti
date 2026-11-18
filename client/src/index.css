@@ -2318,53 +2318,91 @@ a {
   }
 }
 
-/* Tiered layout: 3 leaders above, 2 leaders below */
+/* Tiered layout: 3 leaders above, 2 leaders below (compact & best fit for view) */
+.leadership-section.leaders-page-directors {
+  padding: 32px 0 52px;
+}
+
 .directors-tiered-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 22px;
   width: 100%;
-  max-width: 1180px;
+  max-width: 960px;
   margin: 0 auto;
 }
 
 .directors-row {
   display: grid;
-  gap: 28px;
+  gap: 20px;
   justify-content: center;
   width: 100%;
 }
 
 .directors-row-top {
-  grid-template-columns: repeat(3, minmax(280px, 360px));
+  grid-template-columns: repeat(3, minmax(230px, 290px));
 }
 
 .directors-row-bottom {
-  grid-template-columns: repeat(2, minmax(280px, 360px));
-  max-width: 760px;
+  grid-template-columns: repeat(2, minmax(230px, 290px));
+  max-width: 600px;
   margin: 0 auto;
 }
 
-@media (max-width: 960px) {
+.directors-tiered-wrapper .director-card {
+  min-height: 380px;
+  border-radius: 20px;
+}
+
+.directors-tiered-wrapper .director-card-body {
+  padding: 20px 18px 18px;
+}
+
+.directors-tiered-wrapper .director-designation {
+  font-size: 0.68rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+
+.directors-tiered-wrapper .director-name {
+  font-size: 1.22rem;
+  margin-bottom: 3px;
+}
+
+.directors-tiered-wrapper .director-company {
+  font-size: 0.74rem;
+  margin-bottom: 8px;
+}
+
+.directors-tiered-wrapper .director-desc {
+  font-size: 0.81rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 920px) {
   .directors-row-top {
-    grid-template-columns: repeat(2, minmax(260px, 360px));
+    grid-template-columns: repeat(2, minmax(240px, 300px));
   }
   .directors-row-bottom {
-    grid-template-columns: repeat(2, minmax(260px, 360px));
+    grid-template-columns: repeat(2, minmax(240px, 300px));
     max-width: 100%;
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 600px) {
   .directors-tiered-wrapper {
-    gap: 20px;
+    gap: 18px;
   }
   .directors-row-top,
   .directors-row-bottom {
     grid-template-columns: 1fr;
-    max-width: 420px;
+    max-width: 360px;
     margin: 0 auto;
-    gap: 20px;
+    gap: 18px;
+  }
+  .directors-tiered-wrapper .director-card {
+    min-height: 360px;
   }
 }
 
