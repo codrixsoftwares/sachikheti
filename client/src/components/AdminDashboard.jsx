@@ -10,7 +10,6 @@ import {
   Edit,
   CheckCircle,
   Clock,
-  Sparkles,
   X,
   AlertCircle
 } from 'lucide-react';

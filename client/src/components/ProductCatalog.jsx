@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, ShoppingBag, MessageCircle, Sparkles } from 'lucide-react';
+import { Search, ShoppingBag, MessageCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export default function ProductCatalog({ selectedCategory, onSelectCategory, onOpenProductDetail }) {
@@ -83,7 +83,7 @@ export default function ProductCatalog({ selectedCategory, onSelectCategory, onO
         <div className="catalog-header">
           <div className="catalog-title-col">
             <span className="badge badge-gold" style={{ marginBottom: '8px', display: 'inline-flex' }}>
-              <Sparkles size={14} /> LFPC Certified Catalog
+              LFPC Certified Catalog
             </span>
             <h2 className="catalog-h2">
               Direct From Farm To Table
@@ -162,7 +162,7 @@ export default function ProductCatalog({ selectedCategory, onSelectCategory, onO
                   />
                   {product.featured && (
                     <span className="product-card-tag badge-gold">
-                      ★ Featured
+                      Featured
                     </span>
                   )}
                   {!product.inStock && (

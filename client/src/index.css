@@ -301,10 +301,6 @@ a {
   white-space: nowrap;
 }
 
-.announcement-sparkle {
-  flex-shrink: 0;
-}
-
 .announcement-text-desktop {
   display: inline;
 }

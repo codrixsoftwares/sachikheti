@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Calendar, Clock, ArrowRight, User, Tag, CheckCircle2, Sparkles, X } from 'lucide-react';
+import { BookOpen, Calendar, Clock, ArrowRight, User, Tag, CheckCircle2, X } from 'lucide-react';
 
 const BLOG_POSTS = [
   {

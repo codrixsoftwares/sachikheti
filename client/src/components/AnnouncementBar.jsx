@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 export default function AnnouncementBar() {
   const [banner, setBanner] = useState({
@@ -24,8 +24,6 @@ export default function AnnouncementBar() {
   return (
     <aside className="announcement-bar" role="banner" aria-label="Festive Announcement">
       <div className="announcement-content">
-        <Sparkles size={13} color="#FBBF24" className="announcement-sparkle" />
-        
         {/* Full text for Desktop & Tablet */}
         <span className="announcement-text-desktop">
           <strong>{banner.title}:</strong> {banner.message}

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import ProductCatalog from './ProductCatalog';
-import { Sparkles, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 export default function ProductsPage({ selectedCategory, onSelectCategory, onOpenProductDetail, onNavigateHome }) {
   useEffect(() => {
@@ -14,7 +14,7 @@ export default function ProductsPage({ selectedCategory, onSelectCategory, onOpe
         <div className="container">
           <div className="products-hero-content">
             <span className="badge badge-gold" style={{ marginBottom: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <Sparkles size={14} /> LFPC Complete Farm Catalog
+              LFPC Complete Farm Catalog
             </span>
             <h1 className="products-page-h1">
               Farm-Direct Agricultural Marketplace

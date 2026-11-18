@@ -10,7 +10,6 @@ import {
   Edit,
   CheckCircle,
   Clock,
-  Sparkles,
   X,
   AlertCircle,
   Search,
@@ -1425,7 +1424,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                         </td>
                         <td>
                           {p.featured ? (
-                            <span className="badge badge-gold">★ Featured</span>
+                            <span className="badge badge-gold">Featured</span>
                           ) : (
                             <span style={{ fontSize: '0.78rem', color: '#7A8B80' }}>Standard</span>
                           )}

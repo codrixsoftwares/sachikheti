@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, MessageCircle, CreditCard, CheckCircle2, ShieldCheck, Sparkles, Loader2 } from 'lucide-react';
+import { X, MessageCircle, CreditCard, CheckCircle2, ShieldCheck, Loader2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export default function CheckoutModal({ onClose }) {

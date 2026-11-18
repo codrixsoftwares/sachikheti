@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingBag, Truck, Menu, X, MessageCircle, ChevronRight, ChevronDown, Sparkles, BookOpen, Users, PhoneCall, Layers } from 'lucide-react';
+import { ShoppingBag, Truck, Menu, X, MessageCircle, ChevronRight, ChevronDown, BookOpen, Users, PhoneCall, Layers } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 const BRAND_NAMES = [
@@ -180,7 +180,21 @@ export default function Navbar({
           {/* Middle: Centered Desktop Navigation Island */}
           <nav className="desktop-nav">
             <ul className="nav-links">
-              {/* Dropdown 1: All Products */}
+              {/* Link 1: Home */}
+              <li>
+                <a
+                  href="/"
+                  className={`nav-link ${currentPath === '/' ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handlePageNavigate('/');
+                  }}
+                >
+                  Home
+                </a>
+              </li>
+
+              {/* Dropdown 2: All Products */}
               <li
                 className={`nav-dropdown ${dropdownOpen ? 'open' : ''}`}
                 onMouseEnter={handleMouseEnter}
@@ -380,6 +394,19 @@ export default function Navbar({
 
         {/* Drawer Body Links */}
         <div className="mobile-nav-body">
+          <div className="mobile-nav-section-title">Navigation</div>
+          <ul className="mobile-nav-list" style={{ marginBottom: '16px' }}>
+            <li>
+              <button
+                onClick={() => handlePageNavigate('/')}
+                className={`mobile-nav-item ${currentPath === '/' ? 'active' : ''}`}
+              >
+                <span>🏡 Home</span>
+                <ChevronRight size={16} color="#7A8B80" />
+              </button>
+            </li>
+          </ul>
+
           <div className="mobile-nav-section-title">All Products & Categories</div>
           <ul className="mobile-nav-list">
             <li>
