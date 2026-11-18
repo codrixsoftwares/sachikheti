@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 export const DIRECTORS = [
   {
@@ -68,17 +68,6 @@ export default function LeadershipSection({
       <div className="container">
         {showHeader && (
           <div className="leadership-header">
-            <span
-              className="badge badge-gold"
-              style={{
-                marginBottom: '10px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              <ShieldCheck size={14} /> Official Company Leadership
-            </span>
             <h2 className="leadership-h2">
               {isLimited ? 'Company Executive Leadership' : 'Board of Directors & Management'}
             </h2>
@@ -102,8 +91,6 @@ export default function LeadershipSection({
               </div>
 
               <div className="director-card-body">
-                <span className="director-badge-tag">{director.badge}</span>
-
                 <h3 className="director-name">{director.titleCase}</h3>
 
                 <div className="director-designation">{director.designation}</div>
