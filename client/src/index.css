@@ -380,7 +380,7 @@ a {
   -webkit-backdrop-filter: none;
   border-bottom: none;
   box-shadow: none;
-  padding: 8px 0;
+  padding: 10px 0;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -392,19 +392,24 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 60px;
-  gap: clamp(12px, 2vw, 24px);
+  height: 72px;
+  gap: clamp(16px, 2.5vw, 36px);
   box-sizing: border-box;
 }
 
-/* Top-Left: Brand Emblem & Title (Standalone, outside middle navigation island) */
+/* Top-Left: High-Visibility Brand Emblem & Title */
 .nav-logo-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   text-decoration: none;
   flex-shrink: 0;
   white-space: nowrap;
+  transition: transform 0.25s ease;
+}
+
+.nav-logo-group:hover {
+  transform: translateY(-1px);
 }
 
 .nav-logo-img-wrap {
@@ -414,16 +419,19 @@ a {
 }
 
 .nav-logo-img {
-  height: 48px;
-  width: auto;
-  border-radius: 10px;
-  transition: transform 0.25s ease;
+  height: 54px;
+  width: 54px;
+  border-radius: 12px;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
   display: block;
-  box-shadow: 0 2px 8px rgba(10, 62, 34, 0.12);
+  object-fit: cover;
+  box-shadow: 0 4px 14px rgba(10, 62, 34, 0.16);
+  border: 2px solid rgba(229, 152, 0, 0.35);
 }
 
-.nav-logo-img:hover {
+.nav-logo-group:hover .nav-logo-img {
   transform: scale(1.05);
+  box-shadow: 0 6px 18px rgba(10, 62, 34, 0.22);
 }
 
 .nav-brand-text {
@@ -434,15 +442,16 @@ a {
 }
 
 .brand-title {
-  font-size: clamp(1.3rem, 1.5vw, 1.55rem);
-  font-weight: 800;
+  font-size: clamp(1.55rem, 1.85vw, 1.95rem);
+  font-weight: 850;
   line-height: 1;
   white-space: nowrap;
   display: inline-block;
   background: var(--gradient-sachi-kheti);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  filter: drop-shadow(0 1px 2px rgba(10, 62, 34, 0.08));
 }
 
 .brand-fade-in {
@@ -472,7 +481,7 @@ a {
   border-radius: var(--radius-full);
   padding: 5px 8px;
   box-shadow: 0 4px 20px rgba(10, 62, 34, 0.08), 0 1px 3px rgba(0, 0, 0, 0.03);
-  margin: 0 auto;
+  margin: 0 clamp(12px, 1.5vw, 24px);
   flex-shrink: 0;
 }
 
