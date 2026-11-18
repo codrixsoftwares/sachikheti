@@ -1,8 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Search, ShoppingBag, MessageCircle } from 'lucide-react';
+import { Search, ShoppingBag, MessageCircle, TrendingUp, ArrowRight } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
-export default function ProductCatalog({ selectedCategory, onSelectCategory, onOpenProductDetail }) {
+// Top 3 catalogs by sales ratio in SachiKheti (LFPC)
+const HOME_TOP_3_CATALOGS = [
+  { id: 'all', label: 'All Top Sellers', ratio: 'Top 3 Catalogs' },
+  { id: 'dairy', label: 'Pure Dairy', ratio: '48% Sales Ratio' },
+  { id: 'produce', label: 'Produce & Oils', ratio: '28% Sales Ratio' },
+  { id: 'sweets', label: 'Desi Sweets', ratio: '24% Sales Ratio' },
+];
+
+const PRODUCT_SALES_META = {
+  dairy: { ratio: '48% Sales Ratio', rank: '#1 Best Seller' },
+  produce: { ratio: '28% Sales Ratio', rank: '#2 High Demand' },
+  sweets: { ratio: '24% Sales Ratio', rank: '#3 Customer Favorite' },
+};
+
+export default function ProductCatalog({
+  selectedCategory = 'all',
+  onSelectCategory,
+  onOpenProductDetail,
+  isHome = false,
+  onNavigateProducts,
+}) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -15,21 +35,21 @@ export default function ProductCatalog({ selectedCategory, onSelectCategory, onO
   // Dynamically load categories from live database
   useEffect(() => {
     fetch('/api/categories')
-      .then(res => res.json())
-      .then(data => {
+      .then((res) => res.json())
+      .then((data) => {
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          const apiCats = data.data.map(c => ({
+          const apiCats = data.data.map((c) => ({
             id: c.slug,
             label: c.name,
             punjabi: c.namePunjabi && c.namePunjabi !== c.name ? c.namePunjabi : '',
           }));
           setCategories([
             { id: 'all', label: 'All Products', punjabi: 'ਸਾਰੇ ਉਤਪਾਦ' },
-            ...apiCats
+            ...apiCats,
           ]);
         }
       })
-      .catch(err => console.error('Error fetching categories in catalog:', err));
+      .catch((err) => console.error('Error fetching categories in catalog:', err));
   }, []);
 
   const fetchProducts = async () => {
@@ -76,59 +96,95 @@ export default function ProductCatalog({ selectedCategory, onSelectCategory, onO
     addToCart(product, 1);
   };
 
+  // Determine which categories to display in the filter bar
+  const activeFilters = isHome ? HOME_TOP_3_CATALOGS : categories;
+
+  // On Home page, constrain display to the top 3 catalogs based on verified sales ratios
+  let displayedProducts = products;
+  if (isHome) {
+    if (!selectedCategory || selectedCategory === 'all') {
+      // Pick top representative bestseller from each of the 3 catalogs
+      const ghee =
+        products.find((p) => p.category?.slug === 'dairy' && p.title.includes('Ghee')) ||
+        products.find((p) => p.category?.slug === 'dairy');
+      const oil =
+        products.find((p) => p.category?.slug === 'produce' && p.title.includes('Mustard')) ||
+        products.find((p) => p.category?.slug === 'produce');
+      const pinni =
+        products.find((p) => p.category?.slug === 'sweets' && p.title.includes('Pinni')) ||
+        products.find((p) => p.category?.slug === 'sweets');
+
+      const top3 = [ghee, oil, pinni].filter(Boolean);
+      displayedProducts = top3.length > 0 ? top3.slice(0, 3) : products.slice(0, 3);
+    } else {
+      // If user selected one of the 3 top catalogs on home, show top 3 items in that catalog
+      displayedProducts = products.slice(0, 3);
+    }
+  }
+
   return (
     <section id="catalog" className="catalog-section">
       <div className="container">
         {/* Title & Search Bar */}
         <div className="catalog-header">
           <div className="catalog-title-col">
-            <span className="badge badge-gold" style={{ marginBottom: '8px', display: 'inline-flex' }}>
-              LFPC Certified Catalog
+            <span
+              className="badge badge-gold"
+              style={{
+                marginBottom: '8px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              {isHome ? <TrendingUp size={14} /> : null}
+              {isHome ? 'Top 3 Catalogs by Sales Ratio' : 'LFPC Certified Catalog'}
             </span>
-            <h2 className="catalog-h2">
-              Direct From Farm To Table
-            </h2>
+            <h2 className="catalog-h2">Direct From Farm To Table</h2>
             <p className="catalog-subtitle">
-              Handcrafted pure dairy, farm-grade fertilizers, and reliable agricultural machinery.
+              {isHome
+                ? 'Top 3 consumer-favorite agricultural catalogs ranked by verified household order volume.'
+                : 'Handcrafted pure dairy, farm-grade fertilizers, and reliable agricultural machinery.'}
             </p>
           </div>
 
-          {/* Search Box */}
-          <div className="catalog-search-wrapper">
-            <Search
-              size={18}
-              color="#7A8B80"
-              className="catalog-search-icon"
-            />
-            <input
-              type="text"
-              placeholder="Search products or descriptions..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="form-input catalog-search-input"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="catalog-search-clear"
-                aria-label="Clear Search"
-              >
-                ×
-              </button>
-            )}
-          </div>
+          {/* Search Box (Full catalog view) */}
+          {!isHome && (
+            <div className="catalog-search-wrapper">
+              <Search size={18} color="#7A8B80" className="catalog-search-icon" />
+              <input
+                type="text"
+                placeholder="Search products or descriptions..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="form-input catalog-search-input"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="catalog-search-clear"
+                  aria-label="Clear Search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Category Filters */}
         <div className="catalog-filters-scroll">
           <div className="catalog-filters">
-            {categories.map((cat) => (
+            {activeFilters.map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => onSelectCategory(cat.id)}
                 className={`filter-chip ${selectedCategory === cat.id ? 'active' : ''}`}
               >
                 <span>{cat.label}</span>
+                {isHome && cat.ratio && cat.id !== 'all' && (
+                  <span className="catalog-filter-ratio-pill">{cat.ratio.split(' ')[0]}</span>
+                )}
               </button>
             ))}
           </div>
@@ -139,86 +195,132 @@ export default function ProductCatalog({ selectedCategory, onSelectCategory, onO
           <div className="catalog-state-box">
             <div className="catalog-loading-text">Loading fresh farm produce...</div>
           </div>
-        ) : products.length === 0 ? (
+        ) : displayedProducts.length === 0 ? (
           <div className="catalog-empty-box">
-            <h3 style={{ fontSize: '1.3rem', color: '#0A3E22', marginBottom: '8px' }}>No products found</h3>
-            <p style={{ color: '#7A8B80' }}>Try adjusting your search query or switching categories.</p>
+            <h3 style={{ fontSize: '1.3rem', color: '#0A3E22', marginBottom: '8px' }}>
+              No products found
+            </h3>
+            <p style={{ color: '#7A8B80' }}>
+              Try adjusting your search query or switching categories.
+            </p>
           </div>
         ) : (
           <div className="product-grid">
-            {products.map((product) => (
-              <div
-                key={product.id}
-                className="product-card"
-                onClick={() => onOpenProductDetail(product)}
-              >
-                {/* Product Image Wrap */}
-                <div className="product-card-media">
-                  <img
-                    src={product.imageUrl}
-                    alt={product.title}
-                    className="product-card-img"
-                    loading="lazy"
-                  />
-                  {product.featured && (
-                    <span className="product-card-tag badge-gold">
-                      Featured
-                    </span>
-                  )}
-                  {!product.inStock && (
-                    <span className="product-card-tag badge-out-of-stock">
-                      Sold Out
-                    </span>
-                  )}
-                </div>
+            {displayedProducts.map((product) => {
+              const salesMeta = PRODUCT_SALES_META[product.category?.slug];
 
-                {/* Product Content */}
-                <div className="product-card-body">
-                  <div className="product-card-cat">
-                    {product.category?.name || 'Produce'}
-                  </div>
+              return (
+                <div
+                  key={product.id}
+                  className="product-card"
+                  onClick={() => onOpenProductDetail(product)}
+                >
+                  {/* Product Image Wrap */}
+                  <div className="product-card-media">
+                    <img
+                      src={product.imageUrl}
+                      alt={product.title}
+                      className="product-card-img"
+                      loading="lazy"
+                    />
 
-                  <h3 className="product-card-title">
-                    {product.title}
-                  </h3>
-
-                  <p className="product-card-desc">
-                    {product.description}
-                  </p>
-
-                  <div className="product-card-footer">
-                    <div className="product-price-box">
-                      <span className="product-currency">₹</span>
-                      <span className="product-price">
-                        {product.price.toLocaleString('en-IN')}
+                    {/* Sales Ratio Badge */}
+                    {isHome && salesMeta && (
+                      <span className="product-card-tag badge-sales-ratio">
+                        {salesMeta.ratio}
                       </span>
-                      <span className="product-unit">/{product.unit}</span>
+                    )}
+
+                    {!isHome && product.featured && (
+                      <span className="product-card-tag badge-gold">Featured</span>
+                    )}
+
+                    {!product.inStock && (
+                      <span className="product-card-tag badge-out-of-stock">Sold Out</span>
+                    )}
+                  </div>
+
+                  {/* Product Content */}
+                  <div className="product-card-body">
+                    <div
+                      className="product-card-cat"
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span>{product.category?.name || 'Produce'}</span>
+                      {salesMeta && (
+                        <span style={{ fontSize: '0.72rem', color: '#B46F00', fontWeight: 700 }}>
+                          {salesMeta.rank}
+                        </span>
+                      )}
                     </div>
 
-                    <div className="product-card-actions">
-                      <button
-                        onClick={(e) => handleQuickWhatsApp(product, e)}
-                        className="btn-icon-whatsapp"
-                        title="Inquire or Order via WhatsApp"
-                        aria-label="Order on WhatsApp"
-                      >
-                        <MessageCircle size={18} />
-                      </button>
+                    <h3 className="product-card-title">{product.title}</h3>
 
-                      <button
-                        onClick={(e) => handleAddToCart(product, e)}
-                        disabled={!product.inStock}
-                        className="btn btn-primary btn-sm product-add-btn"
-                        aria-label="Add to cart"
-                      >
-                        <ShoppingBag size={15} />
-                        <span>Add</span>
-                      </button>
+                    <p className="product-card-desc">{product.description}</p>
+
+                    <div className="product-card-footer">
+                      <div className="product-price-box">
+                        <span className="product-currency">₹</span>
+                        <span className="product-price">
+                          {product.price.toLocaleString('en-IN')}
+                        </span>
+                        <span className="product-unit">/{product.unit}</span>
+                      </div>
+
+                      <div className="product-card-actions">
+                        <button
+                          onClick={(e) => handleQuickWhatsApp(product, e)}
+                          className="btn-icon-whatsapp"
+                          title="Inquire or Order via WhatsApp"
+                          aria-label="Order on WhatsApp"
+                        >
+                          <MessageCircle size={18} />
+                        </button>
+
+                        <button
+                          onClick={(e) => handleAddToCart(product, e)}
+                          disabled={!product.inStock}
+                          className="btn btn-primary btn-sm product-add-btn"
+                          aria-label="Add to cart"
+                        >
+                          <ShoppingBag size={15} />
+                          <span>Add</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Home Section CTA to explore complete catalog */}
+        {isHome && (
+          <div className="catalog-home-footer-cta">
+            <div className="catalog-home-cta-text">
+              <div className="catalog-home-cta-heading">
+                Looking for our complete agricultural range?
               </div>
-            ))}
+              <div className="catalog-home-cta-sub">
+                Explore all 5 producer catalogs including heavy tractor rotavators, high-potency
+                vermicompost, and whole farm grains.
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                if (onNavigateProducts) onNavigateProducts();
+                else window.location.href = '/products';
+              }}
+              className="btn btn-primary btn-md"
+            >
+              <span>View All Products in Catalog</span>
+              <ArrowRight size={16} />
+            </button>
           </div>
         )}
       </div>

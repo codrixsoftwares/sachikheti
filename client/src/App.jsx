@@ -114,11 +114,13 @@ function MainApp() {
             onNavigateStory={() => navigateTo('/story')}
           />
 
-          {/* Dynamic Product Catalog across Agricultural Categories */}
+          {/* Dynamic Product Catalog across Agricultural Categories (Top 3 on Home) */}
           <ProductCatalog
+            isHome={true}
             selectedCategory={selectedCategory}
             onSelectCategory={handleSelectCategory}
             onOpenProductDetail={(prod) => setActiveProductDetail(prod)}
+            onNavigateProducts={() => navigateTo('/products')}
           />
 
           {/* SachiKheti LFPC Cooperative Story, Pillars & Board of Directors */}
