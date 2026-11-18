@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Award } from 'lucide-react';
+import { ShieldCheck, ArrowRight } from 'lucide-react';
 
 export const DIRECTORS = [
   {
@@ -54,17 +54,33 @@ export const DIRECTORS = [
   },
 ];
 
-export default function LeadershipSection({ showHeader = true, className = '' }) {
+export default function LeadershipSection({
+  showHeader = true,
+  className = '',
+  limit = null,
+  onNavigateLeaders,
+}) {
+  const displayedDirectors = limit ? DIRECTORS.slice(0, limit) : DIRECTORS;
+  const isLimited = limit && limit < DIRECTORS.length;
+
   return (
     <section id="leadership" className={`leadership-section ${className}`}>
       <div className="container">
         {showHeader && (
           <div className="leadership-header">
-            <span className="badge badge-gold" style={{ marginBottom: '10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <span
+              className="badge badge-gold"
+              style={{
+                marginBottom: '10px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
               <ShieldCheck size={14} /> Official Company Leadership
             </span>
             <h2 className="leadership-h2">
-              Board of Directors & Management
+              {isLimited ? 'Company Executive Leadership' : 'Board of Directors & Management'}
             </h2>
             <p className="leadership-subtitle">
               Officially incorporated under <strong>Lamma Farmer Producer Company Limited (LFPC)</strong>.
@@ -73,8 +89,8 @@ export default function LeadershipSection({ showHeader = true, className = '' })
           </div>
         )}
 
-        <div className="directors-grid">
-          {DIRECTORS.map((director) => (
+        <div className={`directors-grid ${limit === 2 ? 'directors-2col' : ''}`}>
+          {displayedDirectors.map((director) => (
             <div key={director.id} className="director-card">
               <div className="director-avatar-wrapper">
                 <img
@@ -86,29 +102,34 @@ export default function LeadershipSection({ showHeader = true, className = '' })
               </div>
 
               <div className="director-card-body">
-                <span className="director-badge-tag">
-                  {director.badge}
-                </span>
+                <span className="director-badge-tag">{director.badge}</span>
 
-                <h3 className="director-name">
-                  {director.titleCase}
-                </h3>
+                <h3 className="director-name">{director.titleCase}</h3>
 
-                <div className="director-designation">
-                  {director.designation}
-                </div>
+                <div className="director-designation">{director.designation}</div>
 
-                <div className="director-company">
-                  Lamma Farmer Producer Co. Ltd.
-                </div>
+                <div className="director-company">Lamma Farmer Producer Co. Ltd.</div>
 
-                <p className="director-desc">
-                  {director.description}
-                </p>
+                <p className="director-desc">{director.description}</p>
               </div>
             </div>
           ))}
         </div>
+
+        {isLimited && (
+          <div style={{ textAlign: 'center', marginTop: '36px' }}>
+            <button
+              onClick={() => {
+                if (onNavigateLeaders) onNavigateLeaders();
+                else window.location.href = '/leaders';
+              }}
+              className="btn btn-secondary btn-md"
+            >
+              <span>View All 5 Board Directors & Governance</span>
+              <ArrowRight size={16} />
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );

@@ -2303,6 +2303,19 @@ a {
   width: 100%;
 }
 
+.directors-grid.directors-2col {
+  grid-template-columns: repeat(2, minmax(280px, 400px));
+  justify-content: center;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+@media (max-width: 680px) {
+  .directors-grid.directors-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
 .director-card {
   background: #FFFFFF;
   border: 1px solid var(--border-light);

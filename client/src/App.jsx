@@ -123,8 +123,11 @@ function MainApp() {
             onNavigateProducts={() => navigateTo('/products')}
           />
 
-          {/* SachiKheti LFPC Cooperative Story, Pillars & Board of Directors */}
-          <StorySection onExploreClick={() => navigateTo('/products')} />
+          {/* SachiKheti LFPC Cooperative Story, Pillars & Board of Directors (2 Main Executives on Home) */}
+          <StorySection
+            onExploreClick={() => navigateTo('/products')}
+            onNavigateLeaders={() => navigateTo('/leaders')}
+          />
         </>
       )}
 

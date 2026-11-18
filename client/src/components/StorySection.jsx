@@ -1,7 +1,8 @@
 import React from 'react';
 import { ShieldCheck, Users, Sun } from 'lucide-react';
+import LeadershipSection from './LeadershipSection';
 
-export default function StorySection() {
+export default function StorySection({ onNavigateLeaders }) {
   return (
     <section id="story" className="story-section">
       <div className="container">
@@ -78,6 +79,12 @@ export default function StorySection() {
             <div className="story-metric-label">Rural Villages Empowered</div>
           </div>
         </div>
+
+        {/* Official Board of Directors & Leadership (2 Main Executives on Home) */}
+        <LeadershipSection
+          limit={2}
+          onNavigateLeaders={onNavigateLeaders}
+        />
       </div>
     </section>
   );
