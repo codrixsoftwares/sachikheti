@@ -409,6 +409,7 @@ a {
   align-items: center;
   justify-content: space-between;
   height: 72px;
+  gap: clamp(16px, 2.5vw, 36px);
   box-sizing: border-box;
   transition: height 0.3s ease;
 }
@@ -432,7 +433,6 @@ a {
   flex-shrink: 0;
   white-space: nowrap;
   transition: transform 0.25s ease;
-  z-index: 5;
 }
 
 .nav-logo-group:hover {
@@ -468,7 +468,7 @@ a {
   flex-shrink: 0;
   overflow: visible;
   padding: 4px 0;
-  min-width: 175px;
+  width: 195px;
 }
 
 .brand-title {
@@ -510,11 +510,12 @@ a {
   }
 }
 
-/* Center: Fixed Dead-Center Floating Navigation Capsule (Completely Independent of Logo Width) */
+/* Center: Fixed Dead-Center Floating Navigation Capsule (100% Locked) */
 .desktop-nav {
   position: absolute;
   left: 50%;
-  transform: translateX(-50%);
+  top: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -528,6 +529,8 @@ a {
   flex-shrink: 0;
   z-index: 10;
   pointer-events: auto;
+  margin: 0;
+  white-space: nowrap;
 }
 
 .nav-links {
