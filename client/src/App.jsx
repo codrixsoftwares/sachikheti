@@ -99,6 +99,7 @@ function MainApp() {
       {/* Main Glass Navigation Header */}
       <Navbar
         currentPath={currentPath}
+        selectedCategory={selectedCategory}
         onNavigate={navigateTo}
         onOpenTracker={() => setIsTrackerOpen(true)}
         onSelectCategory={handleSelectCategory}

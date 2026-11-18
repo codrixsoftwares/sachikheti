@@ -22,7 +22,7 @@ const formatNavCategory = (name) => {
   return name.length > 15 ? name.substring(0, 14) + '…' : name;
 };
 
-export default function Navbar({ currentPath = '/', onNavigate, onOpenAdmin, onOpenTracker, onSelectCategory }) {
+export default function Navbar({ currentPath = '/', selectedCategory = 'all', onNavigate, onOpenAdmin, onOpenTracker, onSelectCategory }) {
   const { totalItems, setIsCartOpen } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentBrandIndex, setCurrentBrandIndex] = useState(0);
@@ -112,13 +112,13 @@ export default function Navbar({ currentPath = '/', onNavigate, onOpenAdmin, onO
             </div>
           </a>
 
-          {/* Middle: Centered Desktop Navigation (All Products, Produce & Oils, Machinery, Pure Dairy, Organic Manure, Desi Sweets, Our Story) */}
+          {/* Middle: Centered Desktop Navigation Island */}
           <nav className="desktop-nav">
             <ul className="nav-links">
               <li>
                 <a
                   href="#catalog"
-                  className="nav-link"
+                  className={`nav-link ${currentPath === '/' && (!selectedCategory || selectedCategory === 'all') ? 'active' : ''}`}
                   onClick={(e) => {
                     e.preventDefault();
                     handleNavClick('all');
@@ -132,7 +132,7 @@ export default function Navbar({ currentPath = '/', onNavigate, onOpenAdmin, onO
                 <li key={cat.id || cat.slug}>
                   <a
                     href={`#catalog?category=${cat.slug}`}
-                    className="nav-link"
+                    className={`nav-link ${currentPath === '/' && selectedCategory === cat.slug ? 'active' : ''}`}
                     title={cat.name}
                     onClick={(e) => {
                       e.preventDefault();
