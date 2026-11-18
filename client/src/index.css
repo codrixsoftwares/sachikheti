@@ -439,19 +439,32 @@ a {
   align-items: center;
   white-space: nowrap;
   flex-shrink: 0;
+  overflow: visible;
+  padding: 4px 0;
 }
 
 .brand-title {
   font-size: clamp(1.55rem, 1.85vw, 1.95rem);
-  font-weight: 850;
-  line-height: 1;
+  font-weight: 800;
+  line-height: 1.35;
   white-space: nowrap;
   display: inline-block;
+  padding: 4px 12px 4px 2px;
   background: var(--gradient-sachi-kheti);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  letter-spacing: -0.02em;
+  letter-spacing: normal;
+  overflow: visible;
   filter: drop-shadow(0 1px 2px rgba(10, 62, 34, 0.08));
+}
+
+.brand-title.font-hindi,
+.brand-title.font-gurmukhi {
+  letter-spacing: 0;
+  line-height: 1.4;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  padding-right: 14px;
 }
 
 .brand-fade-in {
