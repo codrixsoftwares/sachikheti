@@ -233,11 +233,7 @@ export default function Navbar({
                       handleAllProductsClick();
                     }}
                   >
-                    <span className="dropdown-item-icon">🌾</span>
-                    <div className="dropdown-item-text">
-                      <span className="dropdown-item-title">All Farm Products</span>
-                      <span className="dropdown-item-sub">View complete farm catalog</span>
-                    </div>
+                    All Farm Products
                   </a>
 
                   <div className="nav-dropdown-divider" />
@@ -256,11 +252,7 @@ export default function Navbar({
                         handleCategorySelect(cat.slug);
                       }}
                     >
-                      <span className="dropdown-item-icon">{cat.icon || getCategoryIcon(cat.slug)}</span>
-                      <div className="dropdown-item-text">
-                        <span className="dropdown-item-title">{formatNavCategory(cat.name)}</span>
-                        <span className="dropdown-item-sub">{cat.sub || getCategorySub(cat.slug)}</span>
-                      </div>
+                      {formatNavCategory(cat.name)}
                     </a>
                   ))}
                 </div>
@@ -416,7 +408,7 @@ export default function Navbar({
                   currentPath === '/products' && selectedCategory === 'all' ? 'active' : ''
                 }`}
               >
-                <span>🌾 All Farm Products</span>
+                <span>All Farm Products</span>
                 <ChevronRight size={16} color="#7A8B80" />
               </button>
             </li>
@@ -429,9 +421,7 @@ export default function Navbar({
                     currentPath === '/products' && selectedCategory === cat.slug ? 'active' : ''
                   }`}
                 >
-                  <span>
-                    {cat.icon || getCategoryIcon(cat.slug)} {formatNavCategory(cat.name)}
-                  </span>
+                  <span>{formatNavCategory(cat.name)}</span>
                   <ChevronRight size={16} color="#7A8B80" />
                 </button>
               </li>
