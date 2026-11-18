@@ -8,11 +8,14 @@ const BRAND_NAMES = [
   { text: 'सच्ची खेती', lang: 'हिन्दी', className: 'font-hindi' },
 ];
 
+// Desired explicit category ordering matching modern navbar specification
+const PREFERRED_CATEGORY_ORDER = ['produce', 'machinery', 'dairy', 'manure', 'sweets'];
+
 // Format category names for clean single-line desktop navbar
 const formatNavCategory = (name) => {
   if (!name) return '';
-  if (name.includes('Machinery')) return 'Machinery';
   if (name.includes('Produce') || name.includes('Honey') || name.includes('Oil')) return 'Produce & Oils';
+  if (name.includes('Machinery')) return 'Machinery';
   if (name.includes('Dairy')) return 'Pure Dairy';
   if (name.includes('Manure') || name.includes('Fertilizer')) return 'Organic Manure';
   if (name.includes('Sweets') || name.includes('Pinni')) return 'Desi Sweets';
@@ -68,11 +71,21 @@ export default function Navbar({ currentPath = '/', onNavigate, onOpenAdmin, onO
 
   const currentBrand = BRAND_NAMES[currentBrandIndex];
 
+  // Strictly order categories: Produce & Oils, Machinery, Pure Dairy, Organic Manure, Desi Sweets
+  const orderedCategories = [...categories].sort((a, b) => {
+    const idxA = PREFERRED_CATEGORY_ORDER.indexOf(a.slug);
+    const idxB = PREFERRED_CATEGORY_ORDER.indexOf(b.slug);
+    if (idxA === -1 && idxB === -1) return a.name.localeCompare(b.name);
+    if (idxA === -1) return 1;
+    if (idxB === -1) return -1;
+    return idxA - idxB;
+  });
+
   return (
     <>
       <header className="navbar">
-        <div className="container nav-container">
-          {/* Brand Lockup with Circular Rolling Loop */}
+        <div className="nav-container">
+          {/* Top-Left: Brand Emblem & Name */}
           <a
             href="/"
             className="nav-logo-group"
@@ -99,17 +112,24 @@ export default function Navbar({ currentPath = '/', onNavigate, onOpenAdmin, onO
             </div>
           </a>
 
-          {/* Desktop Navigation Links (Dynamically populated from Database) */}
+          {/* Middle: Centered Desktop Navigation (All Products, Produce & Oils, Machinery, Pure Dairy, Organic Manure, Desi Sweets, Our Story) */}
           <nav className="desktop-nav">
             <ul className="nav-links">
               <li>
-                <a href="#catalog" className="nav-link" onClick={() => handleNavClick('all')}>
+                <a
+                  href="#catalog"
+                  className="nav-link"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleNavClick('all');
+                  }}
+                >
                   All Products
                 </a>
               </li>
 
-              {categories.slice(0, 5).map((cat) => (
-                <li key={cat.id}>
+              {orderedCategories.map((cat) => (
+                <li key={cat.id || cat.slug}>
                   <a
                     href={`#catalog?category=${cat.slug}`}
                     className="nav-link"
@@ -139,12 +159,12 @@ export default function Navbar({ currentPath = '/', onNavigate, onOpenAdmin, onO
             </ul>
           </nav>
 
-          {/* Action Controls */}
+          {/* Top-Right: Track Order & Cart Action Controls */}
           <div className="nav-actions">
-            {/* Order Tracker Button (Desktop & Tablet) */}
+            {/* Order Tracker Button */}
             <button
               onClick={onOpenTracker}
-              className="btn btn-secondary btn-sm nav-hide-mobile"
+              className="btn-track-order nav-hide-mobile"
               title="Track Order by Order ID"
             >
               <Truck size={16} color="#15733E" />
@@ -218,7 +238,7 @@ export default function Navbar({ currentPath = '/', onNavigate, onOpenAdmin, onO
               </button>
             </li>
 
-            {categories.map((cat) => (
+            {orderedCategories.map((cat) => (
               <li key={cat.id}>
                 <button onClick={() => handleNavClick(cat.slug)} className="mobile-nav-item">
                   <span>🌿 {cat.name}</span>
