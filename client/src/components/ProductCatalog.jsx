@@ -1,20 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Search, ShoppingBag, MessageCircle, TrendingUp, ArrowRight } from 'lucide-react';
+import { Search, ShoppingBag, MessageCircle, ArrowRight } from 'lucide-react';
 import { useCart } from '../context/CartContext';
-
-// Top 3 catalogs by sales ratio in SachiKheti (LFPC)
-const HOME_TOP_3_CATALOGS = [
-  { id: 'all', label: 'All Top Sellers', ratio: 'Top 3 Catalogs' },
-  { id: 'dairy', label: 'Pure Dairy', ratio: '48% Sales Ratio' },
-  { id: 'produce', label: 'Produce & Oils', ratio: '28% Sales Ratio' },
-  { id: 'sweets', label: 'Desi Sweets', ratio: '24% Sales Ratio' },
-];
-
-const PRODUCT_SALES_META = {
-  dairy: { ratio: '48% Sales Ratio', rank: '#1 Best Seller' },
-  produce: { ratio: '28% Sales Ratio', rank: '#2 High Demand' },
-  sweets: { ratio: '24% Sales Ratio', rank: '#3 Customer Favorite' },
-};
 
 export default function ProductCatalog({
   selectedCategory = 'all',
@@ -57,10 +43,10 @@ export default function ProductCatalog({
       setLoading(true);
       let url = '/api/products';
       const params = new URLSearchParams();
-      if (selectedCategory && selectedCategory !== 'all') {
+      if (!isHome && selectedCategory && selectedCategory !== 'all') {
         params.append('category', selectedCategory);
       }
-      if (searchQuery.trim()) {
+      if (!isHome && searchQuery.trim()) {
         params.append('search', searchQuery.trim());
       }
       if (params.toString()) {
@@ -81,7 +67,7 @@ export default function ProductCatalog({
 
   useEffect(() => {
     fetchProducts();
-  }, [selectedCategory, searchQuery]);
+  }, [selectedCategory, searchQuery, isHome]);
 
   const handleQuickWhatsApp = (product, e) => {
     e.stopPropagation();
@@ -96,30 +82,24 @@ export default function ProductCatalog({
     addToCart(product, 1);
   };
 
-  // Determine which categories to display in the filter bar
-  const activeFilters = isHome ? HOME_TOP_3_CATALOGS : categories;
-
-  // On Home page, constrain display to the top 3 catalogs based on verified sales ratios
+  // On Home page, display the 4 core agricultural catalogs
   let displayedProducts = products;
   if (isHome) {
-    if (!selectedCategory || selectedCategory === 'all') {
-      // Pick top representative bestseller from each of the 3 catalogs
-      const ghee =
-        products.find((p) => p.category?.slug === 'dairy' && p.title.includes('Ghee')) ||
-        products.find((p) => p.category?.slug === 'dairy');
-      const oil =
-        products.find((p) => p.category?.slug === 'produce' && p.title.includes('Mustard')) ||
-        products.find((p) => p.category?.slug === 'produce');
-      const pinni =
-        products.find((p) => p.category?.slug === 'sweets' && p.title.includes('Pinni')) ||
-        products.find((p) => p.category?.slug === 'sweets');
+    const ghee =
+      products.find((p) => p.category?.slug === 'dairy' && p.title.includes('Ghee')) ||
+      products.find((p) => p.category?.slug === 'dairy');
+    const oil =
+      products.find((p) => p.category?.slug === 'produce' && p.title.includes('Mustard')) ||
+      products.find((p) => p.category?.slug === 'produce');
+    const pinni =
+      products.find((p) => p.category?.slug === 'sweets' && p.title.includes('Pinni')) ||
+      products.find((p) => p.category?.slug === 'sweets');
+    const manure =
+      products.find((p) => p.category?.slug === 'manure' && p.title.includes('Vermicompost')) ||
+      products.find((p) => p.category?.slug === 'manure');
 
-      const top3 = [ghee, oil, pinni].filter(Boolean);
-      displayedProducts = top3.length > 0 ? top3.slice(0, 3) : products.slice(0, 3);
-    } else {
-      // If user selected one of the 3 top catalogs on home, show top 3 items in that catalog
-      displayedProducts = products.slice(0, 3);
-    }
+    const top4 = [ghee, oil, pinni, manure].filter(Boolean);
+    displayedProducts = top4.length === 4 ? top4 : products.slice(0, 4);
   }
 
   return (
@@ -128,22 +108,23 @@ export default function ProductCatalog({
         {/* Title & Search Bar */}
         <div className="catalog-header">
           <div className="catalog-title-col">
-            <span
-              className="badge badge-gold"
-              style={{
-                marginBottom: '8px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              {isHome ? <TrendingUp size={14} /> : null}
-              {isHome ? 'Top 3 Catalogs by Sales Ratio' : 'LFPC Certified Catalog'}
-            </span>
+            {!isHome && (
+              <span
+                className="badge badge-gold"
+                style={{
+                  marginBottom: '8px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                LFPC Certified Catalog
+              </span>
+            )}
             <h2 className="catalog-h2">Direct From Farm To Table</h2>
             <p className="catalog-subtitle">
               {isHome
-                ? 'Top 3 consumer-favorite agricultural catalogs ranked by verified household order volume.'
+                ? 'Handcrafted pure dairy, wood-pressed oils, desi sweets, and certified organic manure.'
                 : 'Handcrafted pure dairy, farm-grade fertilizers, and reliable agricultural machinery.'}
             </p>
           </div>
@@ -172,23 +153,22 @@ export default function ProductCatalog({
           )}
         </div>
 
-        {/* Category Filters */}
-        <div className="catalog-filters-scroll">
-          <div className="catalog-filters">
-            {activeFilters.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => onSelectCategory(cat.id)}
-                className={`filter-chip ${selectedCategory === cat.id ? 'active' : ''}`}
-              >
-                <span>{cat.label}</span>
-                {isHome && cat.ratio && cat.id !== 'all' && (
-                  <span className="catalog-filter-ratio-pill">{cat.ratio.split(' ')[0]}</span>
-                )}
-              </button>
-            ))}
+        {/* Category Filters (Only on dedicated full catalog page) */}
+        {!isHome && (
+          <div className="catalog-filters-scroll">
+            <div className="catalog-filters">
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => onSelectCategory(cat.id)}
+                  className={`filter-chip ${selectedCategory === cat.id ? 'active' : ''}`}
+                >
+                  <span>{cat.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Product Grid */}
         {loading ? (
@@ -205,97 +185,74 @@ export default function ProductCatalog({
             </p>
           </div>
         ) : (
-          <div className="product-grid">
-            {displayedProducts.map((product) => {
-              const salesMeta = PRODUCT_SALES_META[product.category?.slug];
+          <div className={`product-grid ${isHome ? 'home-4-grid' : ''}`}>
+            {displayedProducts.map((product) => (
+              <div
+                key={product.id}
+                className="product-card"
+                onClick={() => onOpenProductDetail(product)}
+              >
+                {/* Product Image Wrap */}
+                <div className="product-card-media">
+                  <img
+                    src={product.imageUrl}
+                    alt={product.title}
+                    className="product-card-img"
+                    loading="lazy"
+                  />
 
-              return (
-                <div
-                  key={product.id}
-                  className="product-card"
-                  onClick={() => onOpenProductDetail(product)}
-                >
-                  {/* Product Image Wrap */}
-                  <div className="product-card-media">
-                    <img
-                      src={product.imageUrl}
-                      alt={product.title}
-                      className="product-card-img"
-                      loading="lazy"
-                    />
+                  {product.featured && (
+                    <span className="product-card-tag badge-gold">Featured</span>
+                  )}
 
-                    {/* Sales Ratio Badge */}
-                    {isHome && salesMeta && (
-                      <span className="product-card-tag badge-sales-ratio">
-                        {salesMeta.ratio}
-                      </span>
-                    )}
+                  {!product.inStock && (
+                    <span className="product-card-tag badge-out-of-stock">Sold Out</span>
+                  )}
+                </div>
 
-                    {!isHome && product.featured && (
-                      <span className="product-card-tag badge-gold">Featured</span>
-                    )}
-
-                    {!product.inStock && (
-                      <span className="product-card-tag badge-out-of-stock">Sold Out</span>
-                    )}
+                {/* Product Content */}
+                <div className="product-card-body">
+                  <div className="product-card-cat">
+                    {product.category?.name || 'Produce'}
                   </div>
 
-                  {/* Product Content */}
-                  <div className="product-card-body">
-                    <div
-                      className="product-card-cat"
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <span>{product.category?.name || 'Produce'}</span>
-                      {salesMeta && (
-                        <span style={{ fontSize: '0.72rem', color: '#B46F00', fontWeight: 700 }}>
-                          {salesMeta.rank}
-                        </span>
-                      )}
+                  <h3 className="product-card-title">{product.title}</h3>
+
+                  <p className="product-card-desc">{product.description}</p>
+
+                  <div className="product-card-footer">
+                    <div className="product-price-box">
+                      <span className="product-currency">₹</span>
+                      <span className="product-price">
+                        {product.price.toLocaleString('en-IN')}
+                      </span>
+                      <span className="product-unit">/{product.unit}</span>
                     </div>
 
-                    <h3 className="product-card-title">{product.title}</h3>
+                    <div className="product-card-actions">
+                      <button
+                        onClick={(e) => handleQuickWhatsApp(product, e)}
+                        className="btn-icon-whatsapp"
+                        title="Inquire or Order via WhatsApp"
+                        aria-label="Order on WhatsApp"
+                      >
+                        <MessageCircle size={18} />
+                      </button>
 
-                    <p className="product-card-desc">{product.description}</p>
-
-                    <div className="product-card-footer">
-                      <div className="product-price-box">
-                        <span className="product-currency">₹</span>
-                        <span className="product-price">
-                          {product.price.toLocaleString('en-IN')}
-                        </span>
-                        <span className="product-unit">/{product.unit}</span>
-                      </div>
-
-                      <div className="product-card-actions">
-                        <button
-                          onClick={(e) => handleQuickWhatsApp(product, e)}
-                          className="btn-icon-whatsapp"
-                          title="Inquire or Order via WhatsApp"
-                          aria-label="Order on WhatsApp"
-                        >
-                          <MessageCircle size={18} />
-                        </button>
-
-                        <button
-                          onClick={(e) => handleAddToCart(product, e)}
-                          disabled={!product.inStock}
-                          className="btn btn-primary btn-sm product-add-btn"
-                          aria-label="Add to cart"
-                        >
-                          <ShoppingBag size={15} />
-                          <span>Add</span>
-                        </button>
-                      </div>
+                      <button
+                        onClick={(e) => handleAddToCart(product, e)}
+                        disabled={!product.inStock}
+                        className="btn btn-primary btn-sm product-add-btn"
+                        aria-label="Add to cart"
+                      >
+                        <ShoppingBag size={15} />
+                        <span>Add</span>
+                      </button>
                     </div>
                   </div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
 
@@ -304,11 +261,11 @@ export default function ProductCatalog({
           <div className="catalog-home-footer-cta">
             <div className="catalog-home-cta-text">
               <div className="catalog-home-cta-heading">
-                Looking for our complete agricultural range?
+                Explore Our Complete Farm & Machinery Catalog
               </div>
               <div className="catalog-home-cta-sub">
-                Explore all 5 producer catalogs including heavy tractor rotavators, high-potency
-                vermicompost, and whole farm grains.
+                View all agricultural machinery, sprayers, raw honey, and bulk fertilizer in our full
+                marketplace.
               </div>
             </div>
             <button

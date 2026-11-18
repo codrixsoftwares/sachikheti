@@ -955,6 +955,21 @@ a {
   margin-top: 24px;
 }
 
+/* Home 4-Column Catalog Grid */
+@media (min-width: 1024px) {
+  .product-grid.home-4-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1023px) {
+  .product-grid.home-4-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+}
+
 .product-card {
   background: #FFFFFF;
   border-radius: 18px;
