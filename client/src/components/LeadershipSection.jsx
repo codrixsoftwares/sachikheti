@@ -63,6 +63,24 @@ export default function LeadershipSection({
   const displayedDirectors = limit ? DIRECTORS.slice(0, limit) : DIRECTORS;
   const isLimited = limit && limit < DIRECTORS.length;
 
+  const renderDirectorCard = (director) => (
+    <div key={director.id} className="director-card">
+      <img
+        src={director.image}
+        alt={`${director.titleCase} - ${director.displayRole}`}
+        className="director-bg-img"
+        loading="lazy"
+      />
+      <div className="director-card-overlay" />
+      <div className="director-card-body">
+        <span className="director-designation">{director.designation}</span>
+        <h3 className="director-name">{director.titleCase}</h3>
+        <div className="director-company">Lamma Farmer Producer Co. Ltd.</div>
+        <p className="director-desc">{director.description}</p>
+      </div>
+    </div>
+  );
+
   return (
     <section id="leadership" className={`leadership-section ${className}`}>
       <div className="container">
@@ -78,25 +96,20 @@ export default function LeadershipSection({
           </div>
         )}
 
-        <div className={`directors-grid ${limit === 2 ? 'directors-2col' : ''}`}>
-          {displayedDirectors.map((director) => (
-            <div key={director.id} className="director-card">
-              <img
-                src={director.image}
-                alt={`${director.titleCase} - ${director.displayRole}`}
-                className="director-bg-img"
-                loading="lazy"
-              />
-              <div className="director-card-overlay" />
-              <div className="director-card-body">
-                <span className="director-designation">{director.designation}</span>
-                <h3 className="director-name">{director.titleCase}</h3>
-                <div className="director-company">Lamma Farmer Producer Co. Ltd.</div>
-                <p className="director-desc">{director.description}</p>
-              </div>
+        {limit === 2 ? (
+          <div className="directors-grid directors-2col">
+            {displayedDirectors.map(renderDirectorCard)}
+          </div>
+        ) : (
+          <div className="directors-tiered-wrapper">
+            <div className="directors-row directors-row-top">
+              {displayedDirectors.slice(0, 3).map(renderDirectorCard)}
             </div>
-          ))}
-        </div>
+            <div className="directors-row directors-row-bottom">
+              {displayedDirectors.slice(3, 5).map(renderDirectorCard)}
+            </div>
+          </div>
+        )}
 
         {isLimited && (
           <div style={{ textAlign: 'center', marginTop: '36px' }}>
