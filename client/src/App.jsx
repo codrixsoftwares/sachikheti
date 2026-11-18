@@ -4,6 +4,7 @@ import AnnouncementBar from './components/AnnouncementBar';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import StoryPage from './components/StoryPage';
+import StorySection from './components/StorySection';
 import ProductCatalog from './components/ProductCatalog';
 import ProductDetailModal from './components/ProductDetailModal';
 import CartDrawer from './components/CartDrawer';
@@ -120,6 +121,9 @@ function MainApp() {
             onSelectCategory={handleSelectCategory}
             onOpenProductDetail={(prod) => setActiveProductDetail(prod)}
           />
+
+          {/* SachiKheti LFPC Cooperative Story, Pillars & Board of Directors */}
+          <StorySection />
         </>
       )}
 

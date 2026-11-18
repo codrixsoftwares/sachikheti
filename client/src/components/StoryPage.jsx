@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { ShieldCheck, Users, Sun, ArrowRight, MessageCircle, Heart, Award, CheckCircle2 } from 'lucide-react';
+import LeadershipSection from './LeadershipSection';
 
 export default function StoryPage({ onExploreClick }) {
   useEffect(() => {
@@ -147,6 +148,9 @@ export default function StoryPage({ onExploreClick }) {
               <div className="story-metric-label">Rural Villages Empowered</div>
             </div>
           </div>
+
+          {/* Official LFPC Board of Directors & Leadership */}
+          <LeadershipSection />
 
           {/* Bottom Call to Action */}
           <div className="story-cta-box">

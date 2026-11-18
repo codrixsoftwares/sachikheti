@@ -505,6 +505,22 @@ a {
   opacity: 1;
 }
 
+@media (min-width: 969px) and (max-width: 1240px) {
+  .nav-links {
+    gap: 8px;
+  }
+  .nav-link {
+    font-size: 0.82rem;
+    padding: 6px 4px;
+  }
+  .brand-title {
+    font-size: 1.22rem;
+  }
+  .nav-logo-img {
+    height: 38px;
+  }
+}
+
 .nav-actions {
   display: flex;
   align-items: center;
@@ -1880,6 +1896,170 @@ a {
   justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+/* ==========================================================================
+   LFPC Board of Directors & Management Leadership
+   ========================================================================== */
+.leadership-section {
+  padding: 56px 0 72px;
+  background-color: transparent;
+  width: 100%;
+}
+
+.leadership-header {
+  text-align: center;
+  max-width: 720px;
+  margin: 0 auto 40px;
+}
+
+.leadership-h2 {
+  font-size: clamp(1.6rem, 3.2vw, 2.2rem);
+  font-weight: 800;
+  color: var(--green-950);
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+  line-height: 1.25;
+}
+
+.leadership-subtitle {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.directors-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 20px;
+  width: 100%;
+}
+
+.director-card {
+  background: #FFFFFF;
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
+  padding: 24px 16px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  box-shadow: 0 4px 16px rgba(10, 62, 34, 0.04);
+  position: relative;
+}
+
+.director-card:hover {
+  transform: translateY(-5px);
+  border-color: rgba(229, 152, 0, 0.45);
+  box-shadow: 0 14px 30px rgba(10, 62, 34, 0.1);
+}
+
+.director-avatar-wrapper {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  overflow: hidden;
+  border: 3px solid #15733E;
+  box-shadow: 0 6px 18px rgba(10, 62, 34, 0.12);
+  flex-shrink: 0;
+  background: #F4F6F4;
+}
+
+.director-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 20%;
+  display: block;
+  transition: transform 0.3s ease;
+}
+
+.director-card:hover .director-avatar-img {
+  transform: scale(1.06);
+}
+
+.director-card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  width: 100%;
+}
+
+.director-badge-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #B46F00;
+  background: rgba(229, 152, 0, 0.12);
+  border: 1px solid rgba(229, 152, 0, 0.25);
+  border-radius: 20px;
+  padding: 2px 10px;
+  margin-bottom: 8px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.director-name {
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: #0A3E22;
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.director-designation {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #15733E;
+  background: #EBF7EE;
+  border: 1px solid rgba(21, 115, 62, 0.2);
+  border-radius: 20px;
+  padding: 3px 10px;
+  display: inline-block;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.director-company {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #7A8B80;
+  margin-bottom: 12px;
+}
+
+.director-desc {
+  font-size: 0.8rem;
+  color: #4A5D50;
+  line-height: 1.5;
+  margin: 0;
+}
+
+@media (max-width: 1100px) {
+  .directors-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+}
+
+@media (max-width: 768px) {
+  .directors-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+}
+
+@media (max-width: 520px) {
+  .directors-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .director-avatar-wrapper {
+    width: 96px;
+    height: 96px;
+  }
 }
 
 @media (max-width: 900px) {
