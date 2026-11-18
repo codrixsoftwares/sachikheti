@@ -118,7 +118,7 @@ export default function StoryPage({ onExploreClick }) {
             <div className="story-deep-media">
               <div className="story-brand-badge-card">
                 <img
-                  src="/assets/brand/sachi-kheti-logo-full.jpg"
+                  src="/assets/brand/sachi-kheti-logo-full.png"
                   alt="SachiKheti LFPC Seal of Authenticity"
                   className="story-badge-img"
                 />

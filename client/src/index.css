@@ -868,19 +868,20 @@ a {
 
 .hero-logo-img {
   width: 100%;
-  max-width: 450px;
+  max-width: 440px;
   height: auto;
   border-radius: 0;
   border: none;
   background: transparent;
   display: block;
-  mix-blend-mode: multiply;
-  filter: drop-shadow(0 14px 32px rgba(10, 62, 34, 0.09));
-  transition: transform 0.35s ease;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 28px rgba(10, 62, 34, 0.12));
+  transition: transform 0.35s ease, filter 0.35s ease;
 }
 
 .hero-logo-img:hover {
-  transform: scale(1.02);
+  transform: translateY(-4px) scale(1.02);
+  filter: drop-shadow(0 20px 36px rgba(10, 62, 34, 0.16));
 }
 
 .hero-floating-stat {
@@ -2652,22 +2653,23 @@ a {
   }
 
   .hero-mobile-logo-wrap {
-    display: block;
+    display: flex;
+    justify-content: flex-start;
     margin-bottom: 20px;
-    text-align: left;
     background: transparent;
   }
 
   .hero-mobile-logo-img {
     width: 100%;
-    max-width: 240px;
+    max-width: 220px;
     height: auto;
     border-radius: 0;
     border: none;
     box-shadow: none;
     background: transparent;
     display: block;
-    mix-blend-mode: multiply;
+    object-fit: contain;
+    filter: drop-shadow(0 8px 18px rgba(10, 62, 34, 0.1));
   }
 
   .hero-image-wrapper {

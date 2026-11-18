@@ -15,7 +15,7 @@ export default function Hero({ onExploreClick, onNavigateStory }) {
           {/* Official Brand Logo (Displayed on Small Screens / Mobile) */}
           <div className="hero-mobile-logo-wrap">
             <img
-              src="/assets/brand/sachi-kheti-logo-full.jpg"
+              src="/assets/brand/sachi-kheti-logo-full.png"
               alt="SachiKheti by LFPC"
               className="hero-mobile-logo-img"
               loading="eager"
@@ -80,7 +80,7 @@ export default function Hero({ onExploreClick, onNavigateStory }) {
         <div className="hero-image-wrapper">
           <div className="hero-logo-card">
             <img
-              src="/assets/brand/sachi-kheti-logo-full.jpg"
+              src="/assets/brand/sachi-kheti-logo-full.png"
               alt="Sachi Kheti Official Brand Logo"
               className="hero-logo-img"
               loading="eager"
