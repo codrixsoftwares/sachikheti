@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Phone, Mail, Clock, MessageCircle, Send, CheckCircle2, ShieldCheck, Building2 } from 'lucide-react';
+import { MapPin, Phone, Mail, Clock, MessageCircle, Send, CheckCircle2, ShieldCheck } from 'lucide-react';
 
 export default function ContactPage() {
   const [formData, setFormData] = useState({
@@ -34,9 +34,6 @@ export default function ContactPage() {
       <section className="contact-hero-section">
         <div className="container">
           <div className="contact-hero-content">
-            <span className="badge badge-gold" style={{ marginBottom: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <Building2 size={14} /> Official Producer Office & Helpdesk
-            </span>
             <h1 className="contact-page-h1">
               Contact SachiKheti (LFPC Ltd.)
             </h1>

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ShieldCheck, Award, Users, CheckCircle2, Building, Scale, ArrowRight, MessageCircle } from 'lucide-react';
+import { Award, Users, CheckCircle2, Building, Scale, ArrowRight, MessageCircle } from 'lucide-react';
 import LeadershipSection from './LeadershipSection';
 
 export default function LeadersPage({ onExploreClick }) {
@@ -13,9 +13,6 @@ export default function LeadersPage({ onExploreClick }) {
       <section className="leaders-hero-section">
         <div className="container">
           <div className="leaders-hero-content">
-            <span className="badge badge-gold" style={{ marginBottom: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <ShieldCheck size={14} /> Official Governance & Management
-            </span>
             <h1 className="leaders-page-h1">
               Board of Directors & Company Leadership
             </h1>

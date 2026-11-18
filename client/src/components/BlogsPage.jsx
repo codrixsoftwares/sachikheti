@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Calendar, Clock, ArrowRight, User, Tag, CheckCircle2, X } from 'lucide-react';
+import { Calendar, Clock, ArrowRight, User, Tag, CheckCircle2, X } from 'lucide-react';
 
 const BLOG_POSTS = [
   {
@@ -104,9 +104,6 @@ export default function BlogsPage({ onExploreClick }) {
       <section className="blogs-hero-section">
         <div className="container">
           <div className="blogs-hero-content">
-            <span className="badge badge-gold" style={{ marginBottom: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <BookOpen size={14} /> LFPC Agricultural Knowledge & Insights
-            </span>
             <h1 className="blogs-page-h1">
               Field Notes, Vedic Heritage & Farming Wisdom
             </h1>
