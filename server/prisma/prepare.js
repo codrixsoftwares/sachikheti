@@ -10,12 +10,16 @@ const isPostgres = dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgres
 
 const targetSchema = path.join(__dirname, 'schema.prisma');
 const pgSchema = path.join(__dirname, 'schema.postgresql.prisma');
+const sqliteSchema = path.join(__dirname, 'schema.sqlite.prisma');
 
 if (isPostgres) {
   console.log('🔄 Detected PostgreSQL connection string. Switching to PostgreSQL Prisma schema...');
   fs.copyFileSync(pgSchema, targetSchema);
   console.log('✅ Updated schema.prisma for PostgreSQL');
 } else {
-  console.log('📦 Using default schema (SQLite / local)...');
+  console.log('📦 Using local SQLite Prisma schema...');
+  if (fs.existsSync(sqliteSchema)) {
+    fs.copyFileSync(sqliteSchema, targetSchema);
+    console.log('✅ Updated schema.prisma for SQLite');
+  }
 }
-

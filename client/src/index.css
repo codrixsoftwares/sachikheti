@@ -1232,15 +1232,24 @@ a {
   background: var(--bg-card-subtle);
 }
 
+.mobile-nav-close,
 .mobile-nav-close-btn {
-  background: none;
+  background: rgba(10, 62, 34, 0.07);
   border: none;
-  color: var(--text-secondary);
+  color: var(--text-dark);
   cursor: pointer;
-  padding: 6px;
+  padding: 8px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.mobile-nav-close:hover,
+.mobile-nav-close-btn:hover {
+  background: rgba(10, 62, 34, 0.14);
+  color: var(--green-950);
 }
 
 .mobile-nav-body {
