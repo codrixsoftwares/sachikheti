@@ -6,6 +6,10 @@ import Hero from './components/Hero';
 import StoryPage from './components/StoryPage';
 import StorySection from './components/StorySection';
 import ProductCatalog from './components/ProductCatalog';
+import ProductsPage from './components/ProductsPage';
+import LeadersPage from './components/LeadersPage';
+import BlogsPage from './components/BlogsPage';
+import ContactPage from './components/ContactPage';
 import ProductDetailModal from './components/ProductDetailModal';
 import CartDrawer from './components/CartDrawer';
 import CheckoutModal from './components/CheckoutModal';
@@ -19,12 +23,16 @@ function MainApp() {
   const [activeProductDetail, setActiveProductDetail] = useState(null);
   const [isTrackerOpen, setIsTrackerOpen] = useState(false);
 
-  // Client-side URL route state for '/', '/story', and '/adminlog'
+  // Client-side URL route state for '/', '/products', '/story', '/leaders', '/blogs', '/contact', and '/adminlog'
   const getInitialPath = () => {
     if (typeof window === 'undefined') return '/';
     const p = window.location.pathname.toLowerCase();
     if (p === '/adminlog') return '/adminlog';
+    if (p === '/products' || p === '/catalog' || p === '/all-products') return '/products';
     if (p === '/story' || p === '/our-story') return '/story';
+    if (p === '/leaders' || p === '/leadership' || p === '/directors') return '/leaders';
+    if (p === '/blogs' || p === '/blog' || p === '/articles') return '/blogs';
+    if (p === '/contact' || p === '/contact-us') return '/contact';
     return '/';
   };
 
@@ -46,34 +54,11 @@ function MainApp() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleExploreClick = () => {
-    if (currentPath !== '/') {
-      navigateTo('/');
-      setTimeout(() => {
-        const catalogElem = document.getElementById('catalog');
-        if (catalogElem) {
-          catalogElem.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 150);
-    } else {
-      const catalogElem = document.getElementById('catalog');
-      if (catalogElem) {
-        catalogElem.scrollIntoView({ behavior: 'smooth' });
-      }
-    }
-  };
-
-  const handleSelectCategory = (cat) => {
+  const handleSelectCategory = (cat, forceProductsPage = false) => {
     setSelectedCategory(cat);
-    if (currentPath !== '/') {
-      navigateTo('/');
-      setTimeout(() => {
-        const catalogElem = document.getElementById('catalog');
-        if (catalogElem) {
-          catalogElem.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 150);
-    } else {
+    if (forceProductsPage || (currentPath !== '/' && currentPath !== '/products')) {
+      navigateTo('/products');
+    } else if (currentPath === '/') {
       const catalogElem = document.getElementById('catalog');
       if (catalogElem) {
         catalogElem.scrollIntoView({ behavior: 'smooth' });
@@ -106,13 +91,26 @@ function MainApp() {
       />
 
       {/* Dedicated Page Routing */}
-      {currentPath === '/story' ? (
-        <StoryPage onExploreClick={handleExploreClick} />
+      {currentPath === '/products' ? (
+        <ProductsPage
+          selectedCategory={selectedCategory}
+          onSelectCategory={(cat) => setSelectedCategory(cat)}
+          onOpenProductDetail={(prod) => setActiveProductDetail(prod)}
+          onNavigateHome={() => navigateTo('/')}
+        />
+      ) : currentPath === '/story' ? (
+        <StoryPage onExploreClick={() => navigateTo('/products')} />
+      ) : currentPath === '/leaders' ? (
+        <LeadersPage onExploreClick={() => navigateTo('/products')} />
+      ) : currentPath === '/blogs' ? (
+        <BlogsPage onExploreClick={() => navigateTo('/products')} />
+      ) : currentPath === '/contact' ? (
+        <ContactPage />
       ) : (
         <>
           {/* Home Showcase */}
           <Hero
-            onExploreClick={handleExploreClick}
+            onExploreClick={() => navigateTo('/products')}
             onNavigateStory={() => navigateTo('/story')}
           />
 
@@ -124,14 +122,14 @@ function MainApp() {
           />
 
           {/* SachiKheti LFPC Cooperative Story, Pillars & Board of Directors */}
-          <StorySection />
+          <StorySection onExploreClick={() => navigateTo('/products')} />
         </>
       )}
 
       {/* Footer */}
       <Footer
         onNavigate={navigateTo}
-        onSelectCategory={handleSelectCategory}
+        onSelectCategory={(cat) => handleSelectCategory(cat, true)}
       />
 
       {/* Modals & Drawers */}

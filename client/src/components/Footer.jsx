@@ -1,7 +1,17 @@
 import React from 'react';
-import { Phone, Mail, MapPin, MessageCircle } from 'lucide-react';
+import { Phone, Mail, MapPin, MessageCircle, ArrowRight, ShieldCheck, Heart } from 'lucide-react';
 
 export default function Footer({ onNavigate, onSelectCategory }) {
+  const handleNav = (e, path) => {
+    e.preventDefault();
+    if (onNavigate) onNavigate(path);
+  };
+
+  const handleCategory = (e, slug) => {
+    e.preventDefault();
+    if (onSelectCategory) onSelectCategory(slug);
+  };
+
   return (
     <footer className="footer-section">
       <div className="container">
@@ -29,8 +39,8 @@ export default function Footer({ onNavigate, onSelectCategory }) {
             </p>
 
             <p className="footer-desc">
-              An authentic agricultural producer company initiative empowering 400+ farmer families to deliver
-              chemical-free Vedic Bilona cow ghee, pure sweets, and certified farming tools.
+              An authentic agricultural producer cooperative initiative empowering 400+ farming families to deliver
+              chemical-free Vedic Bilona cow ghee, wood-pressed oils, organic vermicompost, and certified farming tools.
             </p>
 
             <a
@@ -47,45 +57,97 @@ export default function Footer({ onNavigate, onSelectCategory }) {
           {/* Catalog Categories */}
           <div className="footer-col">
             <h4 className="footer-col-title">
-              Product Catalog
+              Farm Marketplace
             </h4>
             <ul className="footer-links-list">
               <li>
-                <a href="#catalog" onClick={() => onSelectCategory('dairy')} className="footer-link">
-                  Pure Cow Ghee & A2 Dairy
+                <a
+                  href="/products"
+                  onClick={(e) => handleNav(e, '/products')}
+                  className="footer-link"
+                  style={{ fontWeight: 700, color: '#FBBF24' }}
+                >
+                  🌾 All Farm Products
                 </a>
               </li>
               <li>
-                <a href="#catalog" onClick={() => onSelectCategory('sweets')} className="footer-link">
-                  Desi Ghee Atta Pinnis & Sweets
+                <a href="/products?category=dairy" onClick={(e) => handleCategory(e, 'dairy')} className="footer-link">
+                  🥛 Pure Cow Ghee & A2 Dairy
                 </a>
               </li>
               <li>
-                <a href="#catalog" onClick={() => onSelectCategory('manure')} className="footer-link">
-                  Organic Vermicompost & Fertilizers
+                <a href="/products?category=produce" onClick={(e) => handleCategory(e, 'produce')} className="footer-link">
+                  🌻 Cold-Pressed Oils & Forest Honey
                 </a>
               </li>
               <li>
-                <a href="#catalog" onClick={() => onSelectCategory('machinery')} className="footer-link">
-                  Tractor Rotavators & Sprayers
+                <a href="/products?category=manure" onClick={(e) => handleCategory(e, 'manure')} className="footer-link">
+                  🌱 Organic Vermicompost & Fertilizers
+                </a>
+              </li>
+              <li>
+                <a href="/products?category=machinery" onClick={(e) => handleCategory(e, 'machinery')} className="footer-link">
+                  🚜 Tractor Implements & Machinery
+                </a>
+              </li>
+              <li>
+                <a href="/products?category=sweets" onClick={(e) => handleCategory(e, 'sweets')} className="footer-link">
+                  🍯 Desi Ghee Atta Pinnis & Sweets
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          {/* Explore & Company */}
+          <div className="footer-col">
+            <h4 className="footer-col-title">
+              Explore & Leadership
+            </h4>
+            <ul className="footer-links-list">
+              <li>
+                <a
+                  href="/story"
+                  onClick={(e) => handleNav(e, '/story')}
+                  className="footer-link"
+                >
+                  📖 Our Heritage & Story
                 </a>
               </li>
               <li>
                 <a
-                  href="/story"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (onNavigate) onNavigate('/story');
-                    else window.location.href = '/story';
-                  }}
+                  href="/leaders"
+                  onClick={(e) => handleNav(e, '/leaders')}
                   className="footer-link"
                 >
-                  Our Heritage & Cooperative Story
+                  👥 Board of Directors & Leadership
                 </a>
               </li>
               <li>
-                <a href="#catalog" onClick={() => onSelectCategory('produce')} className="footer-link">
-                  Raw Mustard Oil & Forest Honey
+                <a
+                  href="/blogs"
+                  onClick={(e) => handleNav(e, '/blogs')}
+                  className="footer-link"
+                >
+                  📝 Farming & Vedic Health Blogs
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/contact"
+                  onClick={(e) => handleNav(e, '/contact')}
+                  className="footer-link"
+                >
+                  📞 Contact Us & Producer Office
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/adminlog"
+                  onClick={(e) => handleNav(e, '/adminlog')}
+                  className="footer-link"
+                  style={{ opacity: 0.6 }}
+                >
+                  🔒 Admin Portal
                 </a>
               </li>
             </ul>
@@ -120,6 +182,8 @@ export default function Footer({ onNavigate, onSelectCategory }) {
           </div>
           <div className="footer-bottom-links">
             <span style={{ color: '#FBBF24' }}>100% Direct Farmer Produce</span>
+            <span>•</span>
+            <span>MCA Registered Producer Co.</span>
             <span>•</span>
             <span>FSSAI Certified Standards</span>
           </div>

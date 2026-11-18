@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Truck, Menu, X, MessageCircle, ChevronRight, Sparkles, Layers } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ShoppingBag, Truck, Menu, X, MessageCircle, ChevronRight, ChevronDown, Sparkles, BookOpen, Users, PhoneCall, Layers } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 const BRAND_NAMES = [
@@ -8,10 +8,16 @@ const BRAND_NAMES = [
   { text: 'सच्ची खेती', lang: 'हिन्दी', className: 'font-hindi' },
 ];
 
-// Desired explicit category ordering matching modern navbar specification
+const DEFAULT_CATEGORIES = [
+  { slug: 'produce', name: 'Produce & Oils', icon: '🌻', sub: 'Cold-pressed oils & raw forest honey' },
+  { slug: 'machinery', name: 'Machinery', icon: '🚜', sub: 'Rotavators, sprayers & farm implements' },
+  { slug: 'dairy', name: 'Pure Dairy', icon: '🥛', sub: 'Vedic Bilona A2 cow ghee & fresh makkhan' },
+  { slug: 'manure', name: 'Organic Manure', icon: '🌱', sub: 'Bio-enriched vermicompost & soil health' },
+  { slug: 'sweets', name: 'Desi Sweets', icon: '🍯', sub: 'Pure desi ghee atta pinnis & treats' },
+];
+
 const PREFERRED_CATEGORY_ORDER = ['produce', 'machinery', 'dairy', 'manure', 'sweets'];
 
-// Format category names for clean single-line desktop navbar
 const formatNavCategory = (name) => {
   if (!name) return '';
   if (name.includes('Produce') || name.includes('Honey') || name.includes('Oil')) return 'Produce & Oils';
@@ -22,12 +28,30 @@ const formatNavCategory = (name) => {
   return name.length > 15 ? name.substring(0, 14) + '…' : name;
 };
 
-export default function Navbar({ currentPath = '/', selectedCategory = 'all', onNavigate, onOpenAdmin, onOpenTracker, onSelectCategory }) {
+const getCategoryIcon = (slug) => {
+  const match = DEFAULT_CATEGORIES.find((c) => c.slug === slug);
+  return match ? match.icon : '🌾';
+};
+
+const getCategorySub = (slug) => {
+  const match = DEFAULT_CATEGORIES.find((c) => c.slug === slug);
+  return match ? match.sub : 'Direct from LFPC farmers';
+};
+
+export default function Navbar({
+  currentPath = '/',
+  selectedCategory = 'all',
+  onNavigate,
+  onOpenTracker,
+  onSelectCategory,
+}) {
   const { totalItems, setIsCartOpen } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [currentBrandIndex, setCurrentBrandIndex] = useState(0);
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [isScrolled, setIsScrolled] = useState(false);
+  const dropdownTimerRef = useRef(null);
 
   // Monitor window scroll to activate light glass theme across entire navbar
   useEffect(() => {
@@ -42,13 +66,25 @@ export default function Navbar({ currentPath = '/', selectedCategory = 'all', on
   // Fetch dynamic categories from database
   useEffect(() => {
     fetch('/api/categories')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && Array.isArray(data.data)) {
-          setCategories(data.data);
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          // Merge API data with default metadata
+          const merged = PREFERRED_CATEGORY_ORDER.map((slug) => {
+            const apiCat = data.data.find((c) => c.slug === slug);
+            const defCat = DEFAULT_CATEGORIES.find((c) => c.slug === slug);
+            return {
+              id: apiCat ? apiCat.id : slug,
+              slug: slug,
+              name: apiCat ? formatNavCategory(apiCat.name) : defCat.name,
+              icon: defCat.icon,
+              sub: defCat.sub,
+            };
+          });
+          setCategories(merged);
         }
       })
-      .catch(err => console.error('Error loading navbar categories:', err));
+      .catch((err) => console.error('Error loading navbar categories:', err));
   }, []);
 
   // Circular loop interval cycling every 2.4 seconds: English -> Punjabi -> Hindi
@@ -71,39 +107,57 @@ export default function Navbar({ currentPath = '/', selectedCategory = 'all', on
     };
   }, [mobileMenuOpen]);
 
-  const handleNavClick = (categorySlug) => {
-    onSelectCategory(categorySlug);
+  const handleMouseEnter = () => {
+    if (dropdownTimerRef.current) clearTimeout(dropdownTimerRef.current);
+    setDropdownOpen(true);
+  };
+
+  const handleMouseLeave = () => {
+    dropdownTimerRef.current = setTimeout(() => {
+      setDropdownOpen(false);
+    }, 150);
+  };
+
+  const handleCategorySelect = (categorySlug) => {
+    if (onSelectCategory) {
+      onSelectCategory(categorySlug, true);
+    }
+    setDropdownOpen(false);
     setMobileMenuOpen(false);
-    const catalogElem = document.getElementById('catalog');
-    if (catalogElem) {
-      catalogElem.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleAllProductsClick = () => {
+    if (onSelectCategory) {
+      onSelectCategory('all', true);
+    }
+    if (onNavigate) {
+      onNavigate('/products');
+    }
+    setDropdownOpen(false);
+    setMobileMenuOpen(false);
+  };
+
+  const handlePageNavigate = (path) => {
+    setDropdownOpen(false);
+    setMobileMenuOpen(false);
+    if (onNavigate) {
+      onNavigate(path);
     }
   };
 
   const currentBrand = BRAND_NAMES[currentBrandIndex];
 
-  // Strictly order categories: Produce & Oils, Machinery, Pure Dairy, Organic Manure, Desi Sweets
-  const orderedCategories = [...categories].sort((a, b) => {
-    const idxA = PREFERRED_CATEGORY_ORDER.indexOf(a.slug);
-    const idxB = PREFERRED_CATEGORY_ORDER.indexOf(b.slug);
-    if (idxA === -1 && idxB === -1) return a.name.localeCompare(b.name);
-    if (idxA === -1) return 1;
-    if (idxB === -1) return -1;
-    return idxA - idxB;
-  });
-
   return (
     <>
       <header className={`navbar ${isScrolled ? 'scrolled' : ''}`}>
         <div className="nav-container">
-          {/* Top-Left: Brand Emblem & Name */}
+          {/* Top-Left: Brand Emblem & Multi-Language Name */}
           <a
             href="/"
             className="nav-logo-group"
             onClick={(e) => {
               e.preventDefault();
-              if (onNavigate) onNavigate('/');
-              else window.scrollTo({ top: 0, behavior: 'smooth' });
+              handlePageNavigate('/');
             }}
           >
             <div className="nav-logo-img-wrap">
@@ -126,45 +180,131 @@ export default function Navbar({ currentPath = '/', selectedCategory = 'all', on
           {/* Middle: Centered Desktop Navigation Island */}
           <nav className="desktop-nav">
             <ul className="nav-links">
-              <li>
+              {/* Dropdown 1: All Products */}
+              <li
+                className={`nav-dropdown ${dropdownOpen ? 'open' : ''}`}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+              >
                 <a
-                  href="#catalog"
-                  className={`nav-link ${currentPath === '/' && (!selectedCategory || selectedCategory === 'all') ? 'active' : ''}`}
+                  href="/products"
+                  className={`nav-link nav-dropdown-trigger ${
+                    currentPath === '/products' ? 'active' : ''
+                  }`}
                   onClick={(e) => {
                     e.preventDefault();
-                    handleNavClick('all');
+                    handleAllProductsClick();
                   }}
+                  aria-expanded={dropdownOpen}
+                  aria-haspopup="true"
                 >
-                  All Products
+                  <span>All Products</span>
+                  <ChevronDown
+                    size={14}
+                    className={`nav-dropdown-arrow ${dropdownOpen ? 'open' : ''}`}
+                  />
                 </a>
-              </li>
 
-              {orderedCategories.map((cat) => (
-                <li key={cat.id || cat.slug}>
+                {/* Dropdown Menu on Hover */}
+                <div className={`nav-dropdown-menu ${dropdownOpen ? 'open' : ''}`}>
                   <a
-                    href={`#catalog?category=${cat.slug}`}
-                    className={`nav-link ${currentPath === '/' && selectedCategory === cat.slug ? 'active' : ''}`}
-                    title={cat.name}
+                    href="/products"
+                    className={`nav-dropdown-item ${
+                      currentPath === '/products' && selectedCategory === 'all'
+                        ? 'active'
+                        : ''
+                    }`}
                     onClick={(e) => {
                       e.preventDefault();
-                      handleNavClick(cat.slug);
+                      handleAllProductsClick();
                     }}
                   >
-                    {formatNavCategory(cat.name)}
+                    <span className="dropdown-item-icon">🌾</span>
+                    <div className="dropdown-item-text">
+                      <span className="dropdown-item-title">All Farm Products</span>
+                      <span className="dropdown-item-sub">View complete farm catalog</span>
+                    </div>
                   </a>
-                </li>
-              ))}
 
+                  <div className="nav-dropdown-divider" />
+
+                  {categories.map((cat) => (
+                    <a
+                      key={cat.id || cat.slug}
+                      href={`/products?category=${cat.slug}`}
+                      className={`nav-dropdown-item ${
+                        currentPath === '/products' && selectedCategory === cat.slug
+                          ? 'active'
+                          : ''
+                      }`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleCategorySelect(cat.slug);
+                      }}
+                    >
+                      <span className="dropdown-item-icon">{cat.icon || getCategoryIcon(cat.slug)}</span>
+                      <div className="dropdown-item-text">
+                        <span className="dropdown-item-title">{formatNavCategory(cat.name)}</span>
+                        <span className="dropdown-item-sub">{cat.sub || getCategorySub(cat.slug)}</span>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </li>
+
+              {/* Link 2: Our Story */}
               <li>
                 <a
                   href="/story"
                   className={`nav-link ${currentPath === '/story' ? 'active' : ''}`}
                   onClick={(e) => {
                     e.preventDefault();
-                    if (onNavigate) onNavigate('/story');
+                    handlePageNavigate('/story');
                   }}
                 >
                   Our Story
+                </a>
+              </li>
+
+              {/* Link 3: Leaders */}
+              <li>
+                <a
+                  href="/leaders"
+                  className={`nav-link ${currentPath === '/leaders' ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handlePageNavigate('/leaders');
+                  }}
+                >
+                  Leaders
+                </a>
+              </li>
+
+              {/* Link 4: Blogs */}
+              <li>
+                <a
+                  href="/blogs"
+                  className={`nav-link ${currentPath === '/blogs' ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handlePageNavigate('/blogs');
+                  }}
+                >
+                  Blogs
+                </a>
+              </li>
+
+              {/* Link 5: Contact Us */}
+              <li>
+                <a
+                  href="/contact"
+                  className={`nav-link ${currentPath === '/contact' ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handlePageNavigate('/contact');
+                  }}
+                >
+                  Contact Us
                 </a>
               </li>
             </ul>
@@ -226,7 +366,7 @@ export default function Navbar({ currentPath = '/', selectedCategory = 'all', on
             />
             <div>
               <div className="mobile-nav-title">SachiKheti</div>
-              <div className="mobile-nav-sub">Pure Farm Direct</div>
+              <div className="mobile-nav-sub">Pure Farm Direct • LFPC Ltd.</div>
             </div>
           </div>
           <button
@@ -240,44 +380,87 @@ export default function Navbar({ currentPath = '/', selectedCategory = 'all', on
 
         {/* Drawer Body Links */}
         <div className="mobile-nav-body">
-          <div className="mobile-nav-section-title">Store Catalog</div>
+          <div className="mobile-nav-section-title">All Products & Categories</div>
           <ul className="mobile-nav-list">
             <li>
-              <button onClick={() => handleNavClick('all')} className="mobile-nav-item">
+              <button
+                onClick={handleAllProductsClick}
+                className={`mobile-nav-item ${
+                  currentPath === '/products' && selectedCategory === 'all' ? 'active' : ''
+                }`}
+              >
                 <span>🌾 All Farm Products</span>
                 <ChevronRight size={16} color="#7A8B80" />
               </button>
             </li>
 
-            {orderedCategories.map((cat) => (
-              <li key={cat.id}>
-                <button onClick={() => handleNavClick(cat.slug)} className="mobile-nav-item">
-                  <span>🌿 {cat.name}</span>
+            {categories.map((cat) => (
+              <li key={cat.id || cat.slug}>
+                <button
+                  onClick={() => handleCategorySelect(cat.slug)}
+                  className={`mobile-nav-item ${
+                    currentPath === '/products' && selectedCategory === cat.slug ? 'active' : ''
+                  }`}
+                >
+                  <span>
+                    {cat.icon || getCategoryIcon(cat.slug)} {formatNavCategory(cat.name)}
+                  </span>
                   <ChevronRight size={16} color="#7A8B80" />
                 </button>
               </li>
             ))}
+          </ul>
 
+          <div className="mobile-nav-section-title" style={{ marginTop: '20px' }}>
+            Explore SachiKheti
+          </div>
+          <ul className="mobile-nav-list">
             <li>
               <button
                 className={`mobile-nav-item ${currentPath === '/story' ? 'active' : ''}`}
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  if (onNavigate) onNavigate('/story');
-                }}
+                onClick={() => handlePageNavigate('/story')}
               >
                 <span>📖 Our Heritage & Story</span>
                 <ChevronRight size={16} color="#7A8B80" />
               </button>
             </li>
+            <li>
+              <button
+                className={`mobile-nav-item ${currentPath === '/leaders' ? 'active' : ''}`}
+                onClick={() => handlePageNavigate('/leaders')}
+              >
+                <span>👥 Board of Directors & Leaders</span>
+                <ChevronRight size={16} color="#7A8B80" />
+              </button>
+            </li>
+            <li>
+              <button
+                className={`mobile-nav-item ${currentPath === '/blogs' ? 'active' : ''}`}
+                onClick={() => handlePageNavigate('/blogs')}
+              >
+                <span>📝 Farming & Health Blogs</span>
+                <ChevronRight size={16} color="#7A8B80" />
+              </button>
+            </li>
+            <li>
+              <button
+                className={`mobile-nav-item ${currentPath === '/contact' ? 'active' : ''}`}
+                onClick={() => handlePageNavigate('/contact')}
+              >
+                <span>📞 Contact Us & Support</span>
+                <ChevronRight size={16} color="#7A8B80" />
+              </button>
+            </li>
           </ul>
 
-          <div className="mobile-nav-section-title" style={{ marginTop: '20px' }}>Quick Actions</div>
+          <div className="mobile-nav-section-title" style={{ marginTop: '20px' }}>
+            Quick Actions
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <button
               onClick={() => {
                 setMobileMenuOpen(false);
-                onOpenTracker();
+                if (onOpenTracker) onOpenTracker();
               }}
               className="btn btn-secondary"
               style={{ width: '100%', justifyContent: 'center' }}
@@ -302,11 +485,19 @@ export default function Navbar({ currentPath = '/', selectedCategory = 'all', on
 
         {/* Drawer Footer */}
         <div className="mobile-nav-footer">
-          <div style={{ color: '#0A3E22', fontSize: '0.85rem', fontWeight: 700, textAlign: 'center', marginBottom: '4px' }}>
+          <div
+            style={{
+              color: '#0A3E22',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              textAlign: 'center',
+              marginBottom: '4px',
+            }}
+          >
             SachiKheti by LFPC
           </div>
           <div style={{ fontSize: '0.72rem', color: '#7A8B80', textAlign: 'center' }}>
-            LFPC Ltd. • Fatehabad, Haryana
+            Lamma Farmer Producer Co. Ltd. • Fatehabad, Haryana
           </div>
         </div>
       </aside>
