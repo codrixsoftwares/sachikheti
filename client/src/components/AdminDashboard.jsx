@@ -11,12 +11,39 @@ import {
   CheckCircle,
   Clock,
   X,
-  AlertCircle
+  AlertCircle,
+  UploadCloud,
+  Database,
+  ExternalLink,
+  Check,
+  Key,
+  RefreshCw
 } from 'lucide-react';
+import {
+  getSupabaseConfig,
+  saveSupabaseConfig,
+  uploadImageToSupabase,
+  testSupabaseConnection,
+  DEFAULT_SUPABASE_URL,
+  DEFAULT_SUPABASE_BUCKET
+} from '../lib/supabase';
 
 export default function AdminDashboard({ onClose }) {
   const [token, setToken] = useState(() => localStorage.getItem('sachikheti_admin_token') || '');
   const [adminUser, setAdminUser] = useState(null);
+
+  // Supabase storage & configuration state
+  const [supabaseConfig, setSupabaseConfig] = useState(getSupabaseConfig);
+  const [showSupabaseModal, setShowSupabaseModal] = useState(false);
+  const [supabaseForm, setSupabaseForm] = useState({
+    url: supabaseConfig.url,
+    anonKey: supabaseConfig.anonKey,
+    bucket: supabaseConfig.bucket,
+  });
+  const [testResult, setTestResult] = useState(null);
+  const [testingSupabase, setTestingSupabase] = useState(false);
+  const [uploadingImg, setUploadingImg] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState('');
 
   // Login form state
   const [username, setUsername] = useState('SachiKhetiAdmin');
@@ -229,6 +256,60 @@ export default function AdminDashboard({ onClose }) {
     setShowProductModal(true);
   };
 
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!supabaseConfig.isConfigured) {
+      setUploadStatus('Supabase Anon Key is not set. Please connect Supabase first.');
+      setShowSupabaseModal(true);
+      return;
+    }
+
+    try {
+      setUploadingImg(true);
+      setUploadStatus('Uploading to Supabase Storage...');
+      const res = await uploadImageToSupabase(file, 'products');
+
+      if (res.success) {
+        setProductForm((prev) => ({ ...prev, imageUrl: res.url }));
+        setUploadStatus('✓ Uploaded to Supabase CDN successfully!');
+      } else {
+        setUploadStatus(`Upload failed: ${res.error}`);
+        if (res.hint) {
+          alert(`${res.error}\n\nGuide: ${res.hint}`);
+        }
+      }
+    } catch (err) {
+      setUploadStatus(`Upload error: ${err.message}`);
+    } finally {
+      setUploadingImg(false);
+    }
+  };
+
+  const handleTestSupabase = async () => {
+    try {
+      setTestingSupabase(true);
+      setTestResult(null);
+      saveSupabaseConfig(supabaseForm);
+      const res = await testSupabaseConnection();
+      setTestResult(res);
+      setSupabaseConfig(getSupabaseConfig());
+    } catch (err) {
+      setTestResult({ success: false, error: err.message });
+    } finally {
+      setTestingSupabase(false);
+    }
+  };
+
+  const handleSaveSupabaseConfig = () => {
+    saveSupabaseConfig(supabaseForm);
+    const updated = getSupabaseConfig();
+    setSupabaseConfig(updated);
+    alert('Supabase settings saved successfully!');
+    setShowSupabaseModal(false);
+  };
+
   // KPIs
   const totalRevenue = orders.reduce((acc, o) => acc + (o.paymentStatus === 'COMPLETED' ? o.totalAmount : 0), 0);
   const totalOrdersCount = orders.length;
@@ -301,6 +382,36 @@ export default function AdminDashboard({ onClose }) {
               <button type="submit" disabled={loggingIn} className="btn btn-gold" style={{ width: '100%' }}>
                 {loggingIn ? 'Authenticating...' : 'Log In to Superadmin'}
               </button>
+
+              <div style={{ marginTop: '16px', textAlign: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSupabaseForm({
+                      url: supabaseConfig.url,
+                      anonKey: supabaseConfig.anonKey,
+                      bucket: supabaseConfig.bucket,
+                    });
+                    setTestResult(null);
+                    setShowSupabaseModal(true);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#15733E',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  <Database size={14} />
+                  <span>{supabaseConfig.isConfigured ? 'Supabase Storage: Connected' : '⚡ Connect Supabase Cloud Storage'}</span>
+                </button>
+              </div>
             </form>
           </div>
         ) : (
@@ -320,7 +431,23 @@ export default function AdminDashboard({ onClose }) {
                 </span>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button
+                  onClick={() => {
+                    setSupabaseForm({
+                      url: supabaseConfig.url,
+                      anonKey: supabaseConfig.anonKey,
+                      bucket: supabaseConfig.bucket,
+                    });
+                    setTestResult(null);
+                    setShowSupabaseModal(true);
+                  }}
+                  className={`btn ${supabaseConfig.isConfigured ? 'btn-secondary' : 'btn-primary'} btn-sm`}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Database size={15} color={supabaseConfig.isConfigured ? '#15733E' : '#FFFFFF'} />
+                  <span>{supabaseConfig.isConfigured ? 'Supabase: Connected' : '⚡ Connect Supabase'}</span>
+                </button>
                 <button onClick={handleLogout} className="btn btn-secondary btn-sm">
                   <LogOut size={15} />
                   <span>Logout</span>
@@ -617,9 +744,107 @@ export default function AdminDashboard({ onClose }) {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Image URL</label>
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Product Image *</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowSupabaseModal(true)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: supabaseConfig.isConfigured ? '#15733E' : '#B46F00',
+                        fontSize: '0.76rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <Database size={12} />
+                      {supabaseConfig.isConfigured ? 'Supabase CDN Active' : '⚡ Connect Supabase'}
+                    </button>
+                  </label>
+
+                  {/* Supabase Direct Upload Zone */}
+                  <div
+                    style={{
+                      border: '2px dashed rgba(21, 115, 62, 0.25)',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      background: '#FAF9F3',
+                      marginBottom: '10px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      {productForm.imageUrl && (
+                        <img
+                          src={productForm.imageUrl}
+                          alt="Product preview"
+                          style={{
+                            width: '60px',
+                            height: '60px',
+                            objectFit: 'cover',
+                            borderRadius: '8px',
+                            border: '2px solid #15733E',
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
+                      <div style={{ textAlign: 'left', flex: 1 }}>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <label
+                            className="btn btn-secondary btn-sm"
+                            style={{
+                              cursor: uploadingImg ? 'not-allowed' : 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              opacity: uploadingImg ? 0.6 : 1,
+                            }}
+                          >
+                            <UploadCloud size={16} color="#15733E" />
+                            <span>{uploadingImg ? 'Uploading...' : 'Upload Image to Supabase'}</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleImageUpload}
+                              disabled={uploadingImg}
+                              style={{ display: 'none' }}
+                            />
+                          </label>
+
+                          {!supabaseConfig.isConfigured && (
+                            <button
+                              type="button"
+                              onClick={() => setShowSupabaseModal(true)}
+                              className="btn btn-gold btn-sm"
+                              style={{ fontSize: '0.74rem', padding: '5px 10px' }}
+                            >
+                              Paste Anon Key
+                            </button>
+                          )}
+                        </div>
+
+                        {uploadStatus && (
+                          <div
+                            style={{
+                              fontSize: '0.78rem',
+                              marginTop: '6px',
+                              fontWeight: 600,
+                              color: uploadStatus.includes('Error') || uploadStatus.includes('failed') ? '#DC2626' : '#15733E',
+                            }}
+                          >
+                            {uploadStatus}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   <input
                     type="url"
+                    placeholder="https://... (CDN image URL auto-filled on upload above)"
                     value={productForm.imageUrl}
                     onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
                     className="form-input"
@@ -660,6 +885,201 @@ export default function AdminDashboard({ onClose }) {
                   {editingProduct ? 'Save Changes' : 'Create Product'}
                 </button>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Supabase Storage & Cloud Settings Modal */}
+        {showSupabaseModal && (
+          <div className="modal-overlay" style={{ zIndex: 600 }}>
+            <div className="modal-content" style={{ maxWidth: '580px', maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Database size={22} color="#15733E" />
+                  <h3 style={{ fontSize: '1.35rem', fontWeight: 800, margin: 0, color: '#0A3E22' }}>
+                    Connect Supabase Cloud Storage
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowSupabaseModal(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7A8B80' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Status banner */}
+              <div
+                style={{
+                  background: supabaseConfig.isConfigured ? '#EBF7EE' : '#FFFBEB',
+                  border: `1px solid ${supabaseConfig.isConfigured ? '#86EFAC' : '#FDE68A'}`,
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  marginBottom: '20px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                }}
+              >
+                <div style={{ marginTop: '2px' }}>
+                  {supabaseConfig.isConfigured ? (
+                    <CheckCircle size={20} color="#15733E" />
+                  ) : (
+                    <AlertCircle size={20} color="#B46F00" />
+                  )}
+                </div>
+                <div style={{ flex: 1, fontSize: '0.86rem' }}>
+                  <strong style={{ color: supabaseConfig.isConfigured ? '#15733E' : '#B46F00' }}>
+                    {supabaseConfig.isConfigured
+                      ? 'Supabase Credentials Configured'
+                      : 'Supabase Anon Key Required'}
+                  </strong>
+                  <p style={{ margin: '4px 0 0', color: '#4A5D50', lineHeight: 1.45 }}>
+                    {supabaseConfig.isConfigured
+                      ? `Connected to project sachikheti (${supabaseForm.bucket}). Direct image uploads from this admin panel will be stored on Supabase CDN.`
+                      : 'To upload product and marketing photos directly to your Supabase project, paste your project "anon" public key below.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Step-by-Step Help Guide (matches user\'s dashboard screenshot) */}
+              <div
+                style={{
+                  background: '#F8FAF8',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  marginBottom: '20px',
+                  fontSize: '0.84rem',
+                }}
+              >
+                <div style={{ fontWeight: 800, color: '#0A3E22', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>📋 3-Step Setup Guide (From Your Supabase Dashboard):</span>
+                </div>
+                <ol style={{ margin: '0 0 10px', paddingLeft: '20px', color: '#334155', lineHeight: 1.6 }}>
+                  <li>
+                    <strong>Find your Public Anon Key:</strong> In your Supabase dashboard (project <code>sachikheti</code>), click the green <strong>"Connect"</strong> button at the top (or click <strong>API Keys</strong> in the bottom bar / Project Settings &rarr; API) and copy the <code>anon</code> / <code>public</code> key.
+                  </li>
+                  <li>
+                    <strong>Create Public Storage Bucket:</strong> In the left sidebar, click the <strong>Storage</strong> (bucket) icon &rarr; click <strong>"New bucket"</strong> &rarr; name it <code>sachikheti-media</code> &rarr; toggle <strong>"Public bucket"</strong> to <span style={{ color: '#15733E', fontWeight: 700 }}>ON</span> &rarr; click <strong>Save</strong>.
+                  </li>
+                  <li>
+                    <strong>Paste & Test:</strong> Paste your <code>anon</code> key below and click <strong>"Test Connection"</strong>.
+                  </li>
+                </ol>
+                <a
+                  href="https://supabase.com/dashboard/project/uuklvqlwrxvnacbnsyve"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    color: '#15733E',
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    fontSize: '0.82rem',
+                  }}
+                >
+                  <span>Open Supabase Project Dashboard</span>
+                  <ExternalLink size={13} />
+                </a>
+              </div>
+
+              {/* Config Form */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.82rem' }}>
+                    Supabase Project URL
+                  </label>
+                  <input
+                    type="url"
+                    value={supabaseForm.url}
+                    onChange={(e) => setSupabaseForm({ ...supabaseForm, url: e.target.value })}
+                    className="form-input"
+                    placeholder="https://uuklvqlwrxvnacbnsyve.supabase.co"
+                  />
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.82rem' }}>
+                    Supabase Public "anon" API Key *
+                  </label>
+                  <input
+                    type="password"
+                    value={supabaseForm.anonKey}
+                    onChange={(e) => setSupabaseForm({ ...supabaseForm, anonKey: e.target.value })}
+                    className="form-input"
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  />
+                  <span style={{ fontSize: '0.74rem', color: '#7A8B80', marginTop: '4px', display: 'block' }}>
+                    This key is safe for client-side uploads when paired with public storage bucket policies.
+                  </span>
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.82rem' }}>
+                    Storage Bucket Name
+                  </label>
+                  <input
+                    type="text"
+                    value={supabaseForm.bucket}
+                    onChange={(e) => setSupabaseForm({ ...supabaseForm, bucket: e.target.value })}
+                    className="form-input"
+                    placeholder="sachikheti-media"
+                  />
+                </div>
+
+                {/* Test Result Message */}
+                {testResult && (
+                  <div
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      fontSize: '0.84rem',
+                      background: testResult.success ? '#EBF7EE' : '#FEE2E2',
+                      border: `1px solid ${testResult.success ? '#86EFAC' : '#FCA5A5'}`,
+                      color: testResult.success ? '#15733E' : '#B91C1C',
+                    }}
+                  >
+                    {testResult.success ? (
+                      <div>
+                        <strong>✓ Connection Successful!</strong>
+                        <div style={{ marginTop: '4px' }}>{testResult.message}</div>
+                      </div>
+                    ) : (
+                      <div>
+                        <strong>Connection Failed:</strong> {testResult.error}
+                        {testResult.hint && <div style={{ marginTop: '4px' }}>{testResult.hint}</div>}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={handleTestSupabase}
+                    disabled={testingSupabase || !supabaseForm.anonKey}
+                    className="btn btn-secondary"
+                    style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  >
+                    <RefreshCw size={15} className={testingSupabase ? 'spin' : ''} />
+                    <span>{testingSupabase ? 'Testing...' : 'Test Connection'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveSupabaseConfig}
+                    className="btn btn-gold"
+                    style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  >
+                    <Check size={16} />
+                    <span>Save Configuration</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
