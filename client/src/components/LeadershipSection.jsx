@@ -81,22 +81,17 @@ export default function LeadershipSection({
         <div className={`directors-grid ${limit === 2 ? 'directors-2col' : ''}`}>
           {displayedDirectors.map((director) => (
             <div key={director.id} className="director-card">
-              <div className="director-avatar-wrapper">
-                <img
-                  src={director.image}
-                  alt={`${director.titleCase} - ${director.displayRole}`}
-                  className="director-avatar-img"
-                  loading="lazy"
-                />
-              </div>
-
+              <img
+                src={director.image}
+                alt={`${director.titleCase} - ${director.displayRole}`}
+                className="director-bg-img"
+                loading="lazy"
+              />
+              <div className="director-card-overlay" />
               <div className="director-card-body">
+                <span className="director-designation">{director.designation}</span>
                 <h3 className="director-name">{director.titleCase}</h3>
-
-                <div className="director-designation">{director.designation}</div>
-
                 <div className="director-company">Lamma Farmer Producer Co. Ltd.</div>
-
                 <p className="director-desc">{director.description}</p>
               </div>
             </div>
