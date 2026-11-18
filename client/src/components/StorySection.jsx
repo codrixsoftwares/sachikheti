@@ -1,6 +1,5 @@
 import React from 'react';
 import { ShieldCheck, Users, Sun } from 'lucide-react';
-import LeadershipSection from './LeadershipSection';
 
 export default function StorySection() {
   return (
@@ -79,9 +78,6 @@ export default function StorySection() {
             <div className="story-metric-label">Rural Villages Empowered</div>
           </div>
         </div>
-
-        {/* Official Board of Directors & Leadership */}
-        <LeadershipSection />
       </div>
     </section>
   );
