@@ -101,6 +101,12 @@ router.post('/', verifyAdminToken, async (req, res) => {
       include: { category: true }
     });
 
+    // Real-time WebSocket IO Broadcast
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('products:updated', { action: 'create', product: newProduct });
+    }
+
     res.status(201).json({ success: true, message: 'Product created successfully', data: newProduct });
   } catch (error) {
     console.error('Create product error:', error);
@@ -147,6 +153,12 @@ router.put('/:id', verifyAdminToken, async (req, res) => {
       include: { category: true }
     });
 
+    // Real-time WebSocket IO Broadcast
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('products:updated', { action: 'update', product: updated });
+    }
+
     res.json({ success: true, message: 'Product updated successfully', data: updated });
   } catch (error) {
     console.error('Update product error:', error);
@@ -161,6 +173,13 @@ router.delete('/:id', verifyAdminToken, async (req, res) => {
     await prisma.product.delete({
       where: { id }
     });
+
+    // Real-time WebSocket IO Broadcast
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('products:updated', { action: 'delete', id });
+    }
+
     res.json({ success: true, message: 'Product deleted successfully' });
   } catch (error) {
     console.error('Delete product error:', error);

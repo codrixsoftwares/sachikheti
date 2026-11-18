@@ -27,6 +27,7 @@ import {
   DEFAULT_SUPABASE_URL,
   DEFAULT_SUPABASE_BUCKET
 } from '../lib/supabase';
+import { getSocket } from '../lib/socket';
 
 export default function AdminDashboard({ onClose }) {
   const [token, setToken] = useState(() => localStorage.getItem('sachikheti_admin_token') || '');
@@ -45,14 +46,29 @@ export default function AdminDashboard({ onClose }) {
   const [uploadingImg, setUploadingImg] = useState(false);
   const [uploadStatus, setUploadStatus] = useState('');
 
+  // Catalog / Category management state
+  const [showCatalogModal, setShowCatalogModal] = useState(false);
+  const [editingCatalog, setEditingCatalog] = useState(null);
+  const [savingCatalog, setSavingCatalog] = useState(false);
+  const [uploadingCatalogImg, setUploadingCatalogImg] = useState(false);
+  const [catalogUploadStatus, setCatalogUploadStatus] = useState('');
+  const [catalogForm, setCatalogForm] = useState({
+    name: '',
+    namePunjabi: '',
+    slug: '',
+    description: '',
+    icon: 'package',
+    imageUrl: '',
+  });
+
   // Login form state
   const [username, setUsername] = useState('SachiKhetiAdmin');
   const [password, setPassword] = useState('Sachi@Kheti123');
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
 
-  // Dashboard tab state
-  const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'products'
+  // Dashboard tab state: 'orders' | 'products' | 'catalogs'
+  const [activeTab, setActiveTab] = useState('orders');
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -154,6 +170,154 @@ export default function AdminDashboard({ onClose }) {
       console.error('Error loading dashboard data:', err);
     } finally {
       setLoadingData(false);
+    }
+  };
+
+  // Real-time WebSocket IO listener
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleRealtimeUpdate = () => {
+      loadDashboardData();
+    };
+
+    socket.on('categories:updated', handleRealtimeUpdate);
+    socket.on('catalogs:updated', handleRealtimeUpdate);
+    socket.on('products:updated', handleRealtimeUpdate);
+    socket.on('orders:updated', handleRealtimeUpdate);
+
+    return () => {
+      socket.off('categories:updated', handleRealtimeUpdate);
+      socket.off('catalogs:updated', handleRealtimeUpdate);
+      socket.off('products:updated', handleRealtimeUpdate);
+      socket.off('orders:updated', handleRealtimeUpdate);
+    };
+  }, [token]);
+
+  // Catalog Handlers
+  const openNewCatalogModal = () => {
+    setEditingCatalog(null);
+    setCatalogUploadStatus('');
+    setCatalogForm({
+      name: '',
+      namePunjabi: '',
+      slug: '',
+      description: '',
+      icon: 'package',
+      imageUrl: '',
+    });
+    setShowCatalogModal(true);
+  };
+
+  const openEditCatalogModal = (cat) => {
+    setEditingCatalog(cat);
+    setCatalogUploadStatus('');
+    setCatalogForm({
+      name: cat.name,
+      namePunjabi: cat.namePunjabi || cat.name,
+      slug: cat.slug,
+      description: cat.description || '',
+      icon: cat.icon || 'package',
+      imageUrl: cat.imageUrl || '',
+    });
+    setShowCatalogModal(true);
+  };
+
+  const handleUploadCatalogImg = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!supabaseConfig.isConfigured) {
+      setCatalogUploadStatus('Supabase is not configured yet. Click Connect Supabase.');
+      setShowSupabaseModal(true);
+      return;
+    }
+
+    try {
+      setUploadingCatalogImg(true);
+      setCatalogUploadStatus('Uploading to Supabase CDN...');
+      const res = await uploadImageToSupabase(file, 'catalogs');
+      if (res.success) {
+        setCatalogForm((prev) => ({ ...prev, imageUrl: res.url }));
+        setCatalogUploadStatus('✓ Uploaded to Supabase CDN successfully!');
+      } else {
+        setCatalogUploadStatus(`Upload failed: ${res.error}`);
+        if (res.hint) alert(`${res.error}\n\nHint: ${res.hint}`);
+      }
+    } catch (err) {
+      setCatalogUploadStatus(`Error: ${err.message}`);
+    } finally {
+      setUploadingCatalogImg(false);
+    }
+  };
+
+  const handleSaveCatalog = async (e) => {
+    e.preventDefault();
+    if (!catalogForm.name.trim()) {
+      alert('Please enter a catalog name');
+      return;
+    }
+
+    try {
+      setSavingCatalog(true);
+      const url = editingCatalog ? `/api/categories/${editingCatalog.id}` : '/api/categories';
+      const method = editingCatalog ? 'PUT' : 'POST';
+
+      const slug = catalogForm.slug.trim() || catalogForm.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const payload = {
+        name: catalogForm.name.trim(),
+        namePunjabi: catalogForm.namePunjabi?.trim() || catalogForm.name.trim(),
+        slug,
+        description: catalogForm.description?.trim() || '',
+        icon: catalogForm.icon || 'package',
+        imageUrl: catalogForm.imageUrl ? catalogForm.imageUrl.trim() : null,
+      };
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowCatalogModal(false);
+        loadDashboardData();
+      } else {
+        alert(data.message || 'Failed to save catalog');
+      }
+    } catch (err) {
+      alert('Error saving catalog');
+    } finally {
+      setSavingCatalog(false);
+    }
+  };
+
+  const handleDeleteCatalog = async (id, name, productCount = 0) => {
+    if (productCount > 0) {
+      if (!window.confirm(`Warning: Catalog "${name}" has ${productCount} associated products. Deleting it may impact products. Proceed anyway?`)) {
+        return;
+      }
+    } else {
+      if (!window.confirm(`Are you sure you want to delete catalog "${name}"?`)) return;
+    }
+
+    try {
+      const res = await fetch(`/api/categories/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        loadDashboardData();
+      } else {
+        alert(data.message || 'Failed to delete catalog');
+      }
+    } catch (err) {
+      alert('Error deleting catalog');
     }
   };
 
@@ -516,6 +680,13 @@ export default function AdminDashboard({ onClose }) {
               >
                 Product Catalog ({products.length})
               </button>
+              <button
+                onClick={() => setActiveTab('catalogs')}
+                className={`filter-chip ${activeTab === 'catalogs' ? 'active' : ''}`}
+                style={{ borderRadius: '8px 8px 0 0' }}
+              >
+                Catalogs / Categories ({categories.length})
+              </button>
             </div>
 
             {/* Content Area */}
@@ -581,7 +752,7 @@ export default function AdminDashboard({ onClose }) {
                   </table>
                   </div>
                 )
-              ) : (
+              ) : activeTab === 'products' ? (
                 /* Products Table */
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
@@ -648,6 +819,92 @@ export default function AdminDashboard({ onClose }) {
                       ))}
                     </tbody>
                   </table>
+                  </div>
+                </div>
+              ) : (
+                /* Catalogs Table */
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+                    <button onClick={openNewCatalogModal} className="btn btn-primary btn-sm">
+                      <Plus size={16} />
+                      <span>Add New Catalog</span>
+                    </button>
+                  </div>
+
+                  <div className="admin-table-container">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Image</th>
+                          <th>Catalog Name</th>
+                          <th>Punjabi Title</th>
+                          <th>URL Slug</th>
+                          <th>Products Count</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {categories.map((c) => {
+                          const prodCount = c._count?.products ?? products.filter(p => p.categoryId === c.id || p.category?.slug === c.slug).length;
+                          return (
+                            <tr key={c.id}>
+                              <td>
+                                {c.imageUrl ? (
+                                  <img
+                                    src={c.imageUrl}
+                                    alt={c.name}
+                                    style={{ width: '45px', height: '45px', borderRadius: '8px', objectFit: 'cover' }}
+                                  />
+                                ) : (
+                                  <div style={{ width: '45px', height: '45px', borderRadius: '8px', background: '#EBF7EE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
+                                    {c.icon && c.icon !== 'package' && c.icon !== 'tag' ? c.icon : '🌱'}
+                                  </div>
+                                )}
+                              </td>
+                              <td>
+                                <div style={{ fontWeight: 700 }}>{c.name}</div>
+                                {c.description && (
+                                  <div style={{ fontSize: '0.78rem', color: '#7A8B80', maxWidth: '240px' }}>
+                                    {c.description}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="font-gurmukhi" style={{ fontSize: '0.88rem', color: '#15733E', fontWeight: 600 }}>
+                                {c.namePunjabi || c.name}
+                              </td>
+                              <td>
+                                <code style={{ fontSize: '0.78rem', background: '#F1F5F9', padding: '2px 6px', borderRadius: '4px' }}>
+                                  {c.slug}
+                                </code>
+                              </td>
+                              <td>
+                                <span className="badge badge-green">
+                                  {prodCount} products
+                                </span>
+                              </td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button
+                                    onClick={() => openEditCatalogModal(c)}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#15733E' }}
+                                    title="Edit Catalog"
+                                  >
+                                    <Edit size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteCatalog(c.id, c.name, prodCount)}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444' }}
+                                    title="Delete Catalog"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
@@ -884,6 +1141,200 @@ export default function AdminDashboard({ onClose }) {
                 <button type="submit" className="btn btn-gold" style={{ width: '100%' }}>
                   {editingProduct ? 'Save Changes' : 'Create Product'}
                 </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Add/Edit Catalog Modal */}
+        {showCatalogModal && (
+          <div className="modal-overlay" style={{ zIndex: 500 }}>
+            <div className="modal-content" style={{ maxWidth: '520px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+                <h3 style={{ fontSize: '1.3rem', fontWeight: 800 }}>
+                  {editingCatalog ? 'Edit Catalog / Category' : 'Add New Catalog Category'}
+                </h3>
+                <button
+                  onClick={() => setShowCatalogModal(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7A8B80' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveCatalog}>
+                <div className="form-group">
+                  <label className="form-label">Catalog Name (English) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={catalogForm.name}
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      if (!editingCatalog) {
+                        setCatalogForm({
+                          ...catalogForm,
+                          name,
+                          slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                        });
+                      } else {
+                        setCatalogForm({ ...catalogForm, name });
+                      }
+                    }}
+                    className="form-input"
+                    placeholder="e.g. Pure Honey & Spices"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Title (Punjabi / Gurmukhi)</label>
+                  <input
+                    type="text"
+                    value={catalogForm.namePunjabi}
+                    onChange={(e) => setCatalogForm({ ...catalogForm, namePunjabi: e.target.value })}
+                    className="form-input font-gurmukhi"
+                    placeholder="e.g. ਸ਼ੁੱਧ ਸ਼ਹਿਦ ਅਤੇ ਮਸਾਲੇ"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">URL Slug *</label>
+                  <input
+                    type="text"
+                    required
+                    value={catalogForm.slug}
+                    onChange={(e) => setCatalogForm({ ...catalogForm, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, '') })}
+                    className="form-input"
+                    placeholder="e.g. honey-spices"
+                  />
+                </div>
+
+                {/* Catalog Image Upload Section (Supabase Cloud Storage) */}
+                <div className="form-group">
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Catalog Image (Supabase CDN)</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowSupabaseModal(true)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: supabaseConfig.isConfigured ? '#15733E' : '#B46F00',
+                        fontSize: '0.76rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <Database size={12} />
+                      {supabaseConfig.isConfigured ? 'Supabase CDN Active' : '⚡ Connect Supabase'}
+                    </button>
+                  </label>
+
+                  <div
+                    style={{
+                      border: '2px dashed rgba(21, 115, 62, 0.25)',
+                      borderRadius: '12px',
+                      padding: '14px',
+                      background: '#FAF9F3',
+                      marginBottom: '10px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                      {catalogForm.imageUrl && (
+                        <img
+                          src={catalogForm.imageUrl}
+                          alt="Catalog preview"
+                          style={{
+                            width: '56px',
+                            height: '56px',
+                            objectFit: 'cover',
+                            borderRadius: '8px',
+                            border: '2px solid #15733E',
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
+                      <div style={{ textAlign: 'left', flex: 1 }}>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <label
+                            className="btn btn-secondary btn-sm"
+                            style={{
+                              cursor: uploadingCatalogImg ? 'not-allowed' : 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              opacity: uploadingCatalogImg ? 0.6 : 1,
+                            }}
+                          >
+                            <UploadCloud size={16} color="#15733E" />
+                            <span>{uploadingCatalogImg ? 'Uploading...' : 'Upload Image to Supabase'}</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleUploadCatalogImg}
+                              disabled={uploadingCatalogImg}
+                              style={{ display: 'none' }}
+                            />
+                          </label>
+                        </div>
+
+                        {catalogUploadStatus && (
+                          <div
+                            style={{
+                              fontSize: '0.78rem',
+                              marginTop: '6px',
+                              fontWeight: 600,
+                              color: catalogUploadStatus.includes('Error') || catalogUploadStatus.includes('failed') ? '#DC2626' : '#15733E',
+                            }}
+                          >
+                            {catalogUploadStatus}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <input
+                    type="url"
+                    placeholder="https://... (or auto-filled when uploading above)"
+                    value={catalogForm.imageUrl}
+                    onChange={(e) => setCatalogForm({ ...catalogForm, imageUrl: e.target.value })}
+                    className="form-input"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Description (Optional)</label>
+                  <textarea
+                    rows={2}
+                    value={catalogForm.description}
+                    onChange={(e) => setCatalogForm({ ...catalogForm, description: e.target.value })}
+                    className="form-textarea"
+                    placeholder="Short description of this catalog grouping..."
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowCatalogModal(false)}
+                    className="btn btn-secondary"
+                    style={{ flex: 1 }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingCatalog}
+                    className="btn btn-gold"
+                    style={{ flex: 1 }}
+                  >
+                    {savingCatalog ? 'Saving...' : editingCatalog ? 'Update Catalog' : 'Create Catalog'}
+                  </button>
+                </div>
               </form>
             </div>
           </div>

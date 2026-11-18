@@ -50,6 +50,12 @@ router.post('/', async (req, res) => {
       }
     });
 
+    // Real-time WebSocket IO Broadcast
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('orders:updated', { action: 'create', order });
+    }
+
     res.status(201).json({
       success: true,
       message: 'Order placed successfully',
@@ -132,6 +138,11 @@ router.patch('/:id/status', verifyAdminToken, async (req, res) => {
       data: updateData,
     });
 
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('orders:updated', { action: 'status_update', order: updated });
+    }
+
     res.json({ success: true, message: 'Order status updated', data: updated });
   } catch (error) {
     console.error('Update order status error:', error);
@@ -173,6 +184,11 @@ router.put('/:id', verifyAdminToken, async (req, res) => {
       data: updateData,
     });
 
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('orders:updated', { action: 'update', order: updated });
+    }
+
     res.json({ success: true, message: 'Order updated successfully', data: updated });
   } catch (error) {
     console.error('Update order error:', error);
@@ -187,6 +203,12 @@ router.delete('/:id', verifyAdminToken, async (req, res) => {
     await prisma.order.delete({
       where: { id }
     });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('orders:updated', { action: 'delete', id });
+    }
+
     res.json({ success: true, message: 'Order deleted successfully from database' });
   } catch (error) {
     console.error('Delete order error:', error);

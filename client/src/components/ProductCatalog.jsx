@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, ShoppingBag, MessageCircle, ArrowRight } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { getSocket } from '../lib/socket';
 
 export default function ProductCatalog({
   selectedCategory = 'all',
@@ -18,8 +19,7 @@ export default function ProductCatalog({
     { id: 'all', label: 'All Products', punjabi: 'ਸਾਰੇ ਉਤਪਾਦ' },
   ]);
 
-  // Dynamically load categories from live database
-  useEffect(() => {
+  const fetchCategories = () => {
     fetch('/api/categories')
       .then((res) => res.json())
       .then((data) => {
@@ -28,6 +28,7 @@ export default function ProductCatalog({
             id: c.slug,
             label: c.name,
             punjabi: c.namePunjabi && c.namePunjabi !== c.name ? c.namePunjabi : '',
+            imageUrl: c.imageUrl,
           }));
           setCategories([
             { id: 'all', label: 'All Products', punjabi: 'ਸਾਰੇ ਉਤਪਾਦ' },
@@ -36,6 +37,36 @@ export default function ProductCatalog({
         }
       })
       .catch((err) => console.error('Error fetching categories in catalog:', err));
+  };
+
+  // Dynamically load categories from live database
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  // Real-time WebSocket IO listener
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const onCatalogsChange = () => {
+      fetchCategories();
+      fetchProducts();
+    };
+
+    const onProductsChange = () => {
+      fetchProducts();
+    };
+
+    socket.on('categories:updated', onCatalogsChange);
+    socket.on('catalogs:updated', onCatalogsChange);
+    socket.on('products:updated', onProductsChange);
+
+    return () => {
+      socket.off('categories:updated', onCatalogsChange);
+      socket.off('catalogs:updated', onCatalogsChange);
+      socket.off('products:updated', onProductsChange);
+    };
   }, []);
 
   const fetchProducts = async () => {

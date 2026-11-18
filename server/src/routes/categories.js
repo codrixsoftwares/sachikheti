@@ -35,7 +35,7 @@ router.get('/', async (req, res) => {
 // POST /api/categories (Admin Only) - Create a new category
 router.post('/', verifyAdminToken, async (req, res) => {
   try {
-    const { name, slug, description, icon, namePunjabi } = req.body;
+    const { name, slug, description, icon, namePunjabi, imageUrl } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, message: 'Category name is required' });
@@ -58,7 +58,8 @@ router.post('/', verifyAdminToken, async (req, res) => {
         namePunjabi: (namePunjabi && namePunjabi.trim()) ? namePunjabi.trim() : name.trim(),
         slug: finalSlug,
         description: description ? description.trim() : null,
-        icon: icon ? icon.trim() : 'tag',
+        icon: icon ? icon.trim() : 'package',
+        imageUrl: imageUrl ? imageUrl.trim() : null,
       },
       include: {
         _count: {
@@ -66,6 +67,13 @@ router.post('/', verifyAdminToken, async (req, res) => {
         }
       }
     });
+
+    // Real-time WebSocket IO Broadcast
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('categories:updated', { action: 'create', category: newCategory });
+      io.emit('catalogs:updated', { action: 'create', category: newCategory });
+    }
 
     res.status(201).json({ success: true, message: 'Category created successfully', data: newCategory });
   } catch (error) {
@@ -78,13 +86,14 @@ router.post('/', verifyAdminToken, async (req, res) => {
 router.put('/:id', verifyAdminToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, slug, description, icon, namePunjabi } = req.body;
+    const { name, slug, description, icon, namePunjabi, imageUrl } = req.body;
 
     const updateData = {};
     if (name !== undefined) updateData.name = name.trim();
     if (namePunjabi !== undefined) updateData.namePunjabi = namePunjabi.trim();
     if (description !== undefined) updateData.description = description ? description.trim() : null;
     if (icon !== undefined) updateData.icon = icon ? icon.trim() : null;
+    if (imageUrl !== undefined) updateData.imageUrl = imageUrl ? imageUrl.trim() : null;
     if (slug !== undefined && slug.trim()) {
       updateData.slug = slug.trim().toLowerCase();
     }
@@ -98,6 +107,13 @@ router.put('/:id', verifyAdminToken, async (req, res) => {
         }
       }
     });
+
+    // Real-time WebSocket IO Broadcast
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('categories:updated', { action: 'update', category: updated });
+      io.emit('catalogs:updated', { action: 'update', category: updated });
+    }
 
     res.json({ success: true, message: 'Category updated successfully', data: updated });
   } catch (error) {
@@ -113,6 +129,14 @@ router.delete('/:id', verifyAdminToken, async (req, res) => {
     await prisma.category.delete({
       where: { id }
     });
+
+    // Real-time WebSocket IO Broadcast
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('categories:updated', { action: 'delete', id });
+      io.emit('catalogs:updated', { action: 'delete', id });
+    }
+
     res.json({ success: true, message: 'Category deleted successfully' });
   } catch (error) {
     console.error('Delete category error:', error);

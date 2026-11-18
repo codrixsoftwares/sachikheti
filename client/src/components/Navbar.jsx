@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ShoppingBag, Truck, Menu, X, MessageCircle, ChevronRight, ChevronDown, BookOpen, Users, PhoneCall, Layers } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { getSocket } from '../lib/socket';
 
 const BRAND_NAMES = [
   { text: 'SachiKheti', lang: 'English', className: 'font-main' },
@@ -63,28 +64,45 @@ export default function Navbar({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Fetch dynamic categories from database
-  useEffect(() => {
+  const fetchNavCategories = () => {
     fetch('/api/categories')
       .then((res) => res.json())
       .then((data) => {
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          // Merge API data with default metadata
-          const merged = PREFERRED_CATEGORY_ORDER.map((slug) => {
-            const apiCat = data.data.find((c) => c.slug === slug);
-            const defCat = DEFAULT_CATEGORIES.find((c) => c.slug === slug);
-            return {
-              id: apiCat ? apiCat.id : slug,
-              slug: slug,
-              name: apiCat ? formatNavCategory(apiCat.name) : defCat.name,
-              icon: defCat.icon,
-              sub: defCat.sub,
-            };
-          });
-          setCategories(merged);
+          const apiList = data.data.map((c) => ({
+            id: c.id,
+            slug: c.slug,
+            name: formatNavCategory(c.name),
+            icon: c.icon || '🌱',
+            imageUrl: c.imageUrl,
+          }));
+          setCategories(apiList);
         }
       })
       .catch((err) => console.error('Error loading navbar categories:', err));
+  };
+
+  // Fetch dynamic categories from database
+  useEffect(() => {
+    fetchNavCategories();
+  }, []);
+
+  // Real-time WebSocket IO listener
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleUpdate = () => {
+      fetchNavCategories();
+    };
+
+    socket.on('categories:updated', handleUpdate);
+    socket.on('catalogs:updated', handleUpdate);
+
+    return () => {
+      socket.off('categories:updated', handleUpdate);
+      socket.off('catalogs:updated', handleUpdate);
+    };
   }, []);
 
   // Circular loop interval cycling every 2.4 seconds: English -> Punjabi -> Hindi
