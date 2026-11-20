@@ -3220,6 +3220,56 @@ a {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-topbar-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--border-light, #E5E7EB);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.admin-topbar-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-page-title-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.12rem;
+  font-weight: 800;
+  color: #1B2E23;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+}
+
+.admin-topbar-count-pill {
+  font-size: 0.74rem;
+  font-weight: 800;
+  background: #EBF7EE;
+  color: #15733E;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(21, 115, 62, 0.2);
+}
+
+@media (max-width: 768px) {
+  .admin-topbar-divider {
+    display: none;
+  }
+  .admin-brand-sub {
+    display: none;
+  }
+  .admin-page-title-badge {
+    font-size: 0.95rem;
+  }
 }
 
 .admin-sidebar-toggle {

@@ -2339,6 +2339,107 @@ export default function AdminPortalPage({ onNavigateHome }) {
               <div className="admin-brand-sub">LFPC Central Management System</div>
             </div>
           </div>
+
+          {/* Vertical Divider */}
+          <div className="admin-topbar-divider" />
+
+          {/* Active Page Heading (Aligned in Top Bar as Requested) */}
+          <div className="admin-topbar-heading">
+            {activeTab === 'overview' && (
+              <div className="admin-page-title-badge">
+                <TrendingUp size={20} color="#15733E" />
+                <span>Executive Operations Overview</span>
+              </div>
+            )}
+            {(activeTab === 'customer-store' || activeTab === 'billing') && (
+              <div className="admin-page-title-badge">
+                <Store size={20} color="#15733E" />
+                <span>Customer Store & Virtual POS</span>
+              </div>
+            )}
+            {activeTab === 'products' && (
+              <div className="admin-page-title-badge">
+                <Package size={20} color="#15733E" />
+                <span>Products Catalog</span>
+                <span className="admin-topbar-count-pill">{products.length}</span>
+              </div>
+            )}
+            {activeTab === 'categories' && (
+              <div className="admin-page-title-badge">
+                <Layers size={20} color="#15733E" />
+                <span>Product Categories</span>
+                <span className="admin-topbar-count-pill">{categories.length}</span>
+              </div>
+            )}
+            {activeTab === 'orders' && (
+              <div className="admin-page-title-badge">
+                <ShoppingBag size={20} color="#15733E" />
+                <span>Order Fulfillment Center</span>
+                <span className="admin-topbar-count-pill">{orders.length}</span>
+              </div>
+            )}
+            {activeTab === 'history' && (
+              <div className="admin-page-title-badge">
+                <History size={20} color="#15733E" />
+                <span>Past Orders & Bills History</span>
+                <span className="admin-topbar-count-pill">{orders.length}</span>
+              </div>
+            )}
+            {activeTab === 'settings' && (
+              <div className="admin-page-title-badge">
+                <Settings size={20} color="#15733E" />
+                <span>Platform & Store Settings</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Topbar Right Contextual Action Buttons */}
+        <div className="admin-topbar-right">
+          {activeTab === 'overview' && (
+            <button onClick={openAddProductModal} className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={15} />
+              <span>Add Product</span>
+            </button>
+          )}
+
+          {(activeTab === 'customer-store' || activeTab === 'billing') && billingCart.length > 0 && (
+            <button
+              type="button"
+              onClick={clearBillingCart}
+              className="btn btn-secondary btn-sm text-red"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '6px 12px', fontSize: '0.8rem' }}
+            >
+              <Trash2 size={14} />
+              <span>Clear Cart</span>
+            </button>
+          )}
+
+          {activeTab === 'products' && (
+            <button onClick={openAddProductModal} className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={15} />
+              <span>+ Add New Product</span>
+            </button>
+          )}
+
+          {activeTab === 'categories' && (
+            <button onClick={openAddCategoryModal} className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <FolderPlus size={15} />
+              <span>+ Add New Category</span>
+            </button>
+          )}
+
+          {activeTab === 'orders' && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('history')}
+              className="btn btn-secondary btn-sm"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <History size={15} />
+              <span>Past Orders & Bills ({orders.length})</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -2540,17 +2641,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
           {/* ==================================================== */}
           {activeTab === 'overview' && (
             <div className="admin-tab-view">
-              <div className="admin-view-header">
-                <div>
-                  <h1 className="admin-view-title">Executive Operations Overview</h1>
-                  <p className="admin-view-sub">Real-time performance metrics and live fulfillment queue</p>
-                </div>
-                <button onClick={openAddProductModal} className="btn btn-primary">
-                  <Plus size={16} />
-                  <span>Add New Product</span>
-                </button>
-              </div>
-
               {/* KPI Cards Grid */}
               <div className="admin-kpi-grid">
                 <div className="admin-kpi-card">
@@ -2801,31 +2891,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
           {/* ==================================================== */}
           {(activeTab === 'customer-store' || activeTab === 'billing') && (
             <div className="admin-tab-view pos-terminal-tab-view">
-              <div className="admin-view-header" style={{ marginBottom: '8px', flexShrink: 0 }}>
-                <div>
-                  <h1 className="admin-view-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.45rem', margin: 0 }}>
-                    <Store size={24} color="#15733E" />
-                    <span>Customer Store & Virtual POS</span>
-                  </h1>
-                  <p className="admin-view-sub" style={{ fontSize: '0.82rem', marginTop: '2px', marginBottom: 0 }}>
-                    Select catalog products to build a live virtual invoice with WhatsApp dispatch and rental agreement terms.
-                  </p>
-                </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  {billingCart.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={clearBillingCart}
-                      className="btn btn-secondary btn-sm text-red"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '6px 12px', fontSize: '0.8rem' }}
-                    >
-                      <Trash2 size={14} />
-                      <span>Clear</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
               {/* Responsive 2-Column Split: Customer Store Catalogs (Left) + Live Virtual Bill (Right) */}
               <div
                 className="pos-split-container"
@@ -3530,17 +3595,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
           {/* ==================================================== */}
           {activeTab === 'products' && (
             <div className="admin-tab-view">
-              <div className="admin-view-header">
-                <div>
-                  <h1 className="admin-view-title">Products Catalog</h1>
-                  <p className="admin-view-sub">Manage your products, pricing, stock levels, and store visibility</p>
-                </div>
-                <button onClick={openAddProductModal} className="btn btn-primary">
-                  <Plus size={16} />
-                  <span>Add New Product</span>
-                </button>
-              </div>
-
               {/* Search, Filter & Quick Category Bar */}
               <div
                 style={{
@@ -3888,19 +3942,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
           {/* ==================================================== */}
           {activeTab === 'categories' && (
             <div className="admin-tab-view">
-              <div className="admin-view-header">
-                <div>
-                  <h1 className="admin-view-title">Product Categories</h1>
-                  <p className="admin-view-sub">
-                    Create and manage product groupings. New categories immediately appear across storefront navigation and filters.
-                  </p>
-                </div>
-                <button onClick={openAddCategoryModal} className="btn btn-primary">
-                  <FolderPlus size={16} />
-                  <span>Add New Category</span>
-                </button>
-              </div>
-
               <div className="admin-categories-grid">
                 {categories.map(c => (
                   <div key={c.id} className="admin-category-card">
@@ -3960,24 +4001,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
           {/* ==================================================== */}
           {activeTab === 'orders' && (
             <div className="admin-tab-view">
-              <div className="admin-view-header">
-                <div>
-                  <h1 className="admin-view-title">Order Fulfillment Center</h1>
-                  <p className="admin-view-sub">Manage customer orders, create manual phone orders, update delivery status, and delete test records</p>
-                </div>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('history')}
-                    className="btn btn-secondary"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <History size={16} />
-                    <span>Past Orders & Bills ({orders.length})</span>
-                  </button>
-                </div>
-              </div>
-
               {/* Order Search & Filters */}
               <div className="admin-filter-bar">
                 <div className="admin-search-box">
@@ -4986,18 +5009,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
           {/* ==================================================== */}
           {activeTab === 'settings' && (
             <div className="admin-tab-view">
-              <div className="admin-view-header">
-                <div>
-                  <h1 className="admin-view-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Settings size={28} color="#15733E" />
-                    <span>Platform & Store Settings</span>
-                  </h1>
-                  <p className="admin-view-sub">
-                    Manage promotional announcement ribbons, link WhatsApp via Baileys QR code, and customize invoice & bill templates
-                  </p>
-                </div>
-              </div>
-
               {/* Settings Sub-Navigation Tabs */}
               <div
                 style={{
