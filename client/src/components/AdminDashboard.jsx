@@ -73,6 +73,7 @@ export default function AdminDashboard({ onClose }) {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
 
   // Product modal state
   const [showProductModal, setShowProductModal] = useState(false);
@@ -178,6 +179,16 @@ export default function AdminDashboard({ onClose }) {
     const socket = getSocket();
     if (!socket) return;
 
+    const onConnect = () => setSocketConnected(true);
+    const onDisconnect = () => setSocketConnected(false);
+
+    if (socket.connected) {
+      setSocketConnected(true);
+    }
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+
     const handleRealtimeUpdate = () => {
       loadDashboardData();
     };
@@ -186,12 +197,18 @@ export default function AdminDashboard({ onClose }) {
     socket.on('catalogs:updated', handleRealtimeUpdate);
     socket.on('products:updated', handleRealtimeUpdate);
     socket.on('orders:updated', handleRealtimeUpdate);
+    socket.on('metrics:updated', handleRealtimeUpdate);
+    socket.on('banners:updated', handleRealtimeUpdate);
 
     return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
       socket.off('categories:updated', handleRealtimeUpdate);
       socket.off('catalogs:updated', handleRealtimeUpdate);
       socket.off('products:updated', handleRealtimeUpdate);
       socket.off('orders:updated', handleRealtimeUpdate);
+      socket.off('metrics:updated', handleRealtimeUpdate);
+      socket.off('banners:updated', handleRealtimeUpdate);
     };
   }, [token]);
 
@@ -459,9 +476,11 @@ export default function AdminDashboard({ onClose }) {
   };
 
   // KPIs
-  const totalRevenue = orders.reduce((acc, o) => acc + (o.paymentStatus === 'COMPLETED' ? o.totalAmount : 0), 0);
+  const totalRevenue = orders
+    .filter(o => (o.orderStatus || o.status) !== 'CANCELLED')
+    .reduce((acc, o) => acc + (o.totalAmount || 0), 0);
   const totalOrdersCount = orders.length;
-  const pendingOrdersCount = orders.filter(o => o.orderStatus === 'PENDING').length;
+  const pendingOrdersCount = orders.filter(o => (o.orderStatus || o.status) === 'PENDING').length;
 
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 400 }}>
@@ -578,6 +597,35 @@ export default function AdminDashboard({ onClose }) {
               </div>
 
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                {/* Real-time Socket Badge */}
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 10px',
+                    borderRadius: '20px',
+                    background: socketConnected ? '#EBF7EE' : '#FEF3C7',
+                    border: `1px solid ${socketConnected ? '#A7F3D0' : '#FDE68A'}`,
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    color: socketConnected ? '#065F46' : '#92400E',
+                  }}
+                  title={socketConnected ? 'Real-time WebSocket Live & Synchronized' : 'Connecting to socket...'}
+                >
+                  <span
+                    style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      background: socketConnected ? '#10B981' : '#F59E0B',
+                      boxShadow: socketConnected ? '0 0 6px #10B981' : 'none',
+                      display: 'inline-block'
+                    }}
+                  />
+                  <span>{socketConnected ? 'Live Sockets Active' : 'Connecting...'}</span>
+                </div>
+
                 <button
                   onClick={() => {
                     setSupabaseForm({

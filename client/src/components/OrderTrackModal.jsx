@@ -1,11 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Search, Truck, CheckCircle2, Clock, PackageCheck, AlertCircle } from 'lucide-react';
+import { getSocket } from '../lib/socket';
 
 export default function OrderTrackModal({ onClose }) {
   const [orderNumber, setOrderNumber] = useState('');
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Real-time socket listener for live order status changes
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleOrderUpdate = (data) => {
+      if (!data?.order) return;
+      setOrder((prev) => {
+        if (!prev) return prev;
+        if (prev.id === data.order.id || prev.orderNumber === data.order.orderNumber) {
+          return {
+            ...prev,
+            ...data.order,
+            orderStatus: data.order.orderStatus || data.order.status || prev.orderStatus,
+          };
+        }
+        return prev;
+      });
+    };
+
+    socket.on('orders:updated', handleOrderUpdate);
+
+    return () => {
+      socket.off('orders:updated', handleOrderUpdate);
+    };
+  }, []);
 
   const handleTrack = async (e) => {
     e.preventDefault();

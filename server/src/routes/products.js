@@ -1,6 +1,7 @@
 import express from 'express';
 import prisma from '../prisma.js';
 import { verifyAdminToken } from '../middleware/auth.js';
+import { broadcastRealtimeUpdate } from '../lib/broadcast.js';
 
 const router = express.Router();
 
@@ -101,10 +102,10 @@ router.post('/', verifyAdminToken, async (req, res) => {
       include: { category: true }
     });
 
-    // Real-time WebSocket IO Broadcast
+    // Real-time WebSocket IO Broadcast with Live Overview Metrics
     const io = req.app.get('io');
     if (io) {
-      io.emit('products:updated', { action: 'create', product: newProduct });
+      await broadcastRealtimeUpdate(io, 'products:updated', { action: 'create', product: newProduct });
     }
 
     res.status(201).json({ success: true, message: 'Product created successfully', data: newProduct });
@@ -153,10 +154,10 @@ router.put('/:id', verifyAdminToken, async (req, res) => {
       include: { category: true }
     });
 
-    // Real-time WebSocket IO Broadcast
+    // Real-time WebSocket IO Broadcast with Live Overview Metrics
     const io = req.app.get('io');
     if (io) {
-      io.emit('products:updated', { action: 'update', product: updated });
+      await broadcastRealtimeUpdate(io, 'products:updated', { action: 'update', product: updated });
     }
 
     res.json({ success: true, message: 'Product updated successfully', data: updated });
@@ -174,10 +175,10 @@ router.delete('/:id', verifyAdminToken, async (req, res) => {
       where: { id }
     });
 
-    // Real-time WebSocket IO Broadcast
+    // Real-time WebSocket IO Broadcast with Live Overview Metrics
     const io = req.app.get('io');
     if (io) {
-      io.emit('products:updated', { action: 'delete', id });
+      await broadcastRealtimeUpdate(io, 'products:updated', { action: 'delete', id });
     }
 
     res.json({ success: true, message: 'Product deleted successfully' });

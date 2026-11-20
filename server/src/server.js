@@ -13,6 +13,7 @@ import ordersRouter from './routes/orders.js';
 import paymentRouter from './routes/payment.js';
 import bannersRouter from './routes/banners.js';
 import uploadRouter from './routes/upload.js';
+import metricsRouter from './routes/metrics.js';
 
 dotenv.config();
 
@@ -61,6 +62,7 @@ app.use('/api/orders', ordersRouter);
 app.use('/api/payment/razorpay', paymentRouter);
 app.use('/api/banners', bannersRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/admin/metrics', metricsRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

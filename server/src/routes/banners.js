@@ -35,6 +35,11 @@ router.post('/', verifyAdminToken, async (req, res) => {
       }
     });
 
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('banners:updated', { action: 'create', banner: newBanner });
+    }
+
     res.status(201).json({ success: true, message: 'Banner created successfully', data: newBanner });
   } catch (error) {
     console.error('Create banner error:', error);
@@ -58,6 +63,11 @@ router.put('/:id', verifyAdminToken, async (req, res) => {
       },
     });
 
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('banners:updated', { action: 'update', banner: updated });
+    }
+
     res.json({ success: true, message: 'Banner updated', data: updated });
   } catch (error) {
     console.error('Update banner error:', error);
@@ -72,6 +82,12 @@ router.delete('/:id', verifyAdminToken, async (req, res) => {
     await prisma.banner.delete({
       where: { id }
     });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('banners:updated', { action: 'delete', id });
+    }
+
     res.json({ success: true, message: 'Banner deleted successfully' });
   } catch (error) {
     console.error('Delete banner error:', error);

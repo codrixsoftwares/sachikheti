@@ -75,6 +75,11 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const [loadingData, setLoadingData] = useState(false);
   const [actionSuccess, setActionSuccess] = useState('');
 
+  // Real-time Overview Metrics & WebSocket connection state
+  const [serverMetrics, setServerMetrics] = useState(null);
+  const [realtimeAlert, setRealtimeAlert] = useState(null);
+  const [socketConnected, setSocketConnected] = useState(false);
+
   // Search & Filter controls
   const [productSearch, setProductSearch] = useState('');
   const [selectedProductCategory, setSelectedProductCategory] = useState('all');
@@ -163,11 +168,12 @@ export default function AdminPortalPage({ onNavigateHome }) {
       setLoadingData(true);
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [ordersRes, productsRes, categoriesRes, bannersRes] = await Promise.all([
+      const [ordersRes, productsRes, categoriesRes, bannersRes, metricsRes] = await Promise.all([
         fetch('/api/orders', { headers }).then(r => r.json()).catch(() => ({ data: [] })),
         fetch('/api/products').then(r => r.json()).catch(() => ({ data: [] })),
         fetch('/api/categories').then(r => r.json()).catch(() => ({ data: [] })),
         fetch('/api/banners').then(r => r.json()).catch(() => ({ data: [] })),
+        fetch('/api/admin/metrics', { headers }).then(r => r.json()).catch(() => null),
       ]);
 
       if (ordersRes.success) setOrders(ordersRes.data || []);
@@ -175,6 +181,9 @@ export default function AdminPortalPage({ onNavigateHome }) {
       if (categoriesRes.success) setCategories(categoriesRes.data || []);
       if (bannersRes.success && bannersRes.data && bannersRes.data.length > 0) {
         setBanner(bannersRes.data[0]);
+      }
+      if (metricsRes?.success && metricsRes.data) {
+        setServerMetrics(metricsRes.data);
       }
     } catch (err) {
       console.error('Error refreshing admin data:', err);
@@ -188,21 +197,70 @@ export default function AdminPortalPage({ onNavigateHome }) {
     const socket = getSocket();
     if (!socket) return;
 
-    const handleRealtimeUpdate = (data) => {
-      // Refresh database records in real-time
+    const onConnect = () => setSocketConnected(true);
+    const onDisconnect = () => setSocketConnected(false);
+
+    if (socket.connected) {
+      setSocketConnected(true);
+    }
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+
+    // Live Metrics Update Push from Database
+    const handleMetricsUpdate = (newMetrics) => {
+      if (newMetrics) {
+        setServerMetrics(newMetrics);
+      }
+    };
+
+    // Live Orders Update with Sound Chime & Visual Notification
+    const handleOrderRealtime = (data) => {
+      if (data?.action === 'create' && data.order) {
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) {
+            const ctx = new AudioContext();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+            osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15);
+            gain.gain.setValueAtTime(0.2, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.5);
+          }
+        } catch (e) {}
+
+        setRealtimeAlert(`🔔 New Order Received: #${data.order.orderNumber} (₹${data.order.totalAmount}) from ${data.order.customerName}`);
+        setTimeout(() => setRealtimeAlert(null), 8000);
+      }
       loadAllData();
     };
 
-    socket.on('categories:updated', handleRealtimeUpdate);
-    socket.on('catalogs:updated', handleRealtimeUpdate);
-    socket.on('products:updated', handleRealtimeUpdate);
-    socket.on('orders:updated', handleRealtimeUpdate);
+    const handleGenericRefresh = () => {
+      loadAllData();
+    };
+
+    socket.on('metrics:updated', handleMetricsUpdate);
+    socket.on('orders:updated', handleOrderRealtime);
+    socket.on('categories:updated', handleGenericRefresh);
+    socket.on('catalogs:updated', handleGenericRefresh);
+    socket.on('products:updated', handleGenericRefresh);
+    socket.on('banners:updated', handleGenericRefresh);
 
     return () => {
-      socket.off('categories:updated', handleRealtimeUpdate);
-      socket.off('catalogs:updated', handleRealtimeUpdate);
-      socket.off('products:updated', handleRealtimeUpdate);
-      socket.off('orders:updated', handleRealtimeUpdate);
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.off('metrics:updated', handleMetricsUpdate);
+      socket.off('orders:updated', handleOrderRealtime);
+      socket.off('categories:updated', handleGenericRefresh);
+      socket.off('catalogs:updated', handleGenericRefresh);
+      socket.off('products:updated', handleGenericRefresh);
+      socket.off('banners:updated', handleGenericRefresh);
     };
   }, [token]);
 
@@ -753,29 +811,56 @@ export default function AdminPortalPage({ onNavigateHome }) {
     return matchesSearch && matchesCat;
   });
 
+  const getStatus = (o) => o.orderStatus || o.status || 'PENDING';
+
   const filteredOrders = orders.filter(o => {
     const matchesSearch = !orderSearch ||
       o.orderNumber.toLowerCase().includes(orderSearch.toLowerCase()) ||
       o.customerName.toLowerCase().includes(orderSearch.toLowerCase()) ||
       o.customerPhone.includes(orderSearch);
-    const matchesStatus = orderStatusFilter === 'all' || o.status === orderStatusFilter;
+    const matchesStatus = orderStatusFilter === 'all' || getStatus(o) === orderStatusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  // KPI Metrics & Analytics Calculations
-  const totalRevenue = orders
-    .filter(o => o.status !== 'CANCELLED')
-    .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-  const pendingOrdersCount = orders.filter(o => o.status === 'PENDING').length;
-  const inStockProductsCount = products.filter(p => p.inStock).length;
+  // KPI Metrics & Analytics Calculations (Real-time Database Synchronized)
+  const totalRevenue = serverMetrics?.totalRevenue !== undefined
+    ? serverMetrics.totalRevenue
+    : orders
+        .filter(o => getStatus(o) !== 'CANCELLED')
+        .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+  const pendingOrdersCount = serverMetrics?.pendingOrders !== undefined
+    ? serverMetrics.pendingOrders
+    : orders.filter(o => getStatus(o) === 'PENDING').length;
+
+  const inStockProductsCount = serverMetrics?.inStockProducts !== undefined
+    ? serverMetrics.inStockProducts
+    : products.filter(p => p.inStock).length;
 
   // 1. Order Fulfillment Funnel Calculations
-  const totalOrdersCount = orders.length;
-  const confirmedCount = orders.filter(o => ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'].includes(o.status)).length;
-  const processingCount = orders.filter(o => ['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(o.status)).length;
-  const shippedCount = orders.filter(o => ['SHIPPED', 'DELIVERED'].includes(o.status)).length;
-  const deliveredCount = orders.filter(o => o.status === 'DELIVERED').length;
-  const cancelledCount = orders.filter(o => o.status === 'CANCELLED').length;
+  const totalOrdersCount = serverMetrics?.totalOrders !== undefined
+    ? serverMetrics.totalOrders
+    : orders.length;
+
+  const confirmedCount = serverMetrics?.confirmedOrders !== undefined
+    ? serverMetrics.confirmedOrders
+    : orders.filter(o => ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'].includes(getStatus(o))).length;
+
+  const processingCount = serverMetrics?.processingOrders !== undefined
+    ? serverMetrics.processingOrders
+    : orders.filter(o => ['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(getStatus(o))).length;
+
+  const shippedCount = serverMetrics?.shippedOrders !== undefined
+    ? serverMetrics.shippedOrders
+    : orders.filter(o => ['SHIPPED', 'DELIVERED'].includes(getStatus(o))).length;
+
+  const deliveredCount = serverMetrics?.deliveredOrders !== undefined
+    ? serverMetrics.deliveredOrders
+    : orders.filter(o => getStatus(o) === 'DELIVERED').length;
+
+  const cancelledCount = serverMetrics?.cancelledOrders !== undefined
+    ? serverMetrics.cancelledOrders
+    : orders.filter(o => getStatus(o) === 'CANCELLED').length;
 
   const funnelSteps = [
     {
@@ -821,44 +906,58 @@ export default function AdminPortalPage({ onNavigateHome }) {
   ];
 
   // 2. Sales by Category Bar Graph Calculations
-  const categorySalesMap = {};
-  categories.forEach(c => {
-    categorySalesMap[c.id] = {
-      id: c.id,
-      name: c.name,
-      sales: 0,
-      units: 0,
-      productCount: c._count?.products || 0,
-    };
-  });
+  const categorySalesList = (serverMetrics?.categorySalesList && serverMetrics.categorySalesList.length > 0)
+    ? serverMetrics.categorySalesList
+    : (() => {
+        const categorySalesMap = {};
+        categories.forEach(c => {
+          categorySalesMap[c.id] = {
+            id: c.id,
+            name: c.name,
+            sales: 0,
+            units: 0,
+            productCount: c._count?.products || 0,
+          };
+        });
 
-  orders.forEach(o => {
-    if (o.status === 'CANCELLED') return;
-    try {
-      const items = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
-      (items || []).forEach(item => {
-        const prod = products.find(p => p.id === item.productId || p.title === item.title);
-        const catId = prod?.categoryId || (categories.length > 0 ? categories[0].id : null);
-        if (catId && categorySalesMap[catId]) {
-          categorySalesMap[catId].sales += (item.price || 0) * (item.quantity || 1);
-          categorySalesMap[catId].units += (item.quantity || 1);
-        }
-      });
-    } catch (e) {}
-  });
+        orders.forEach(o => {
+          if (getStatus(o) === 'CANCELLED') return;
+          try {
+            const items = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
+            (items || []).forEach(item => {
+              const prod = products.find(p => p.id === item.productId || p.title === item.title);
+              const catId = prod?.categoryId || (categories.length > 0 ? categories[0].id : null);
+              if (catId && categorySalesMap[catId]) {
+                categorySalesMap[catId].sales += (item.price || 0) * (item.quantity || 1);
+                categorySalesMap[catId].units += (item.quantity || 1);
+              }
+            });
+          } catch (e) {}
+        });
 
-  const categorySalesList = Object.values(categorySalesMap);
-  const maxCategorySales = Math.max(...categorySalesList.map(c => c.sales), 1);
+        return Object.values(categorySalesMap);
+      })();
+
+  const maxCategorySales = serverMetrics?.maxCategorySales || Math.max(...categorySalesList.map(c => c.sales), 1);
 
   // 3. Revenue Breakdown by Payment Method
-  const whatsappRevenue = orders
-    .filter(o => o.paymentMethod === 'WHATSAPP' && o.status !== 'CANCELLED')
-    .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-  const onlineRevenue = orders
-    .filter(o => o.paymentMethod !== 'WHATSAPP' && o.status !== 'CANCELLED')
-    .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  const whatsappRevenue = serverMetrics?.whatsappRevenue !== undefined
+    ? serverMetrics.whatsappRevenue
+    : orders
+        .filter(o => o.paymentMethod === 'WHATSAPP' && getStatus(o) !== 'CANCELLED')
+        .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+  const onlineRevenue = serverMetrics?.onlineRevenue !== undefined
+    ? serverMetrics.onlineRevenue
+    : orders
+        .filter(o => o.paymentMethod !== 'WHATSAPP' && getStatus(o) !== 'CANCELLED')
+        .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
   const totalValidRevenue = (whatsappRevenue + onlineRevenue) || 1;
-  const whatsappRatio = Math.round((whatsappRevenue / totalValidRevenue) * 100) || 50;
+  const whatsappRatio = serverMetrics?.whatsappRatio !== undefined
+    ? serverMetrics.whatsappRatio
+    : (Math.round((whatsappRevenue / totalValidRevenue) * 100) || 50);
+
   const onlineRatio = 100 - whatsappRatio;
 
   // Circumference for SVG Donut (r=45 => 2 * PI * 45 ≈ 282.74)
@@ -867,12 +966,14 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const onlineDash = donutCircumference - whatsappDash;
 
   // Timeline points for Dotted Graph
-  const timelinePoints = orders.slice(0, 7).map((o, idx) => ({
-    label: new Date(o.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
-    amount: o.totalAmount || 0,
-    orderNumber: o.orderNumber,
-    status: o.status
-  })).reverse();
+  const timelinePoints = (serverMetrics?.timelinePoints && serverMetrics.timelinePoints.length > 0)
+    ? serverMetrics.timelinePoints
+    : orders.slice(0, 7).map((o) => ({
+        label: new Date(o.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+        amount: o.totalAmount || 0,
+        orderNumber: o.orderNumber,
+        status: getStatus(o)
+      })).reverse();
 
 
   // ==========================================
@@ -1000,6 +1101,35 @@ export default function AdminPortalPage({ onNavigateHome }) {
         </div>
 
         <div className="admin-topbar-right">
+          {/* Real-time WebSocket Synchronized Badge */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '5px 11px',
+              borderRadius: '20px',
+              background: socketConnected ? '#EBF7EE' : '#FEF3C7',
+              border: `1px solid ${socketConnected ? '#A7F3D0' : '#FDE68A'}`,
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              color: socketConnected ? '#065F46' : '#92400E',
+            }}
+            title={socketConnected ? 'Real-time WebSocket Live & Synchronized with SQLite DB' : 'Connecting to real-time socket...'}
+          >
+            <span
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: socketConnected ? '#10B981' : '#F59E0B',
+                boxShadow: socketConnected ? '0 0 6px #10B981' : 'none',
+                display: 'inline-block'
+              }}
+            />
+            <span className="hide-on-mobile">{socketConnected ? 'Live Sockets Synchronized' : 'Connecting Sockets...'}</span>
+          </div>
+
           <button
             onClick={loadAllData}
             className="btn btn-secondary btn-sm admin-refresh-btn"
@@ -1057,6 +1187,20 @@ export default function AdminPortalPage({ onNavigateHome }) {
         <div className="admin-toast-banner">
           <CheckCircle size={18} />
           <span>{actionSuccess}</span>
+        </div>
+      )}
+
+      {/* Real-time Live Order Audio & Visual Toast */}
+      {realtimeAlert && (
+        <div className="admin-toast-banner" style={{ background: '#0A3E22', color: '#FFFFFF', border: '1px solid #15733E', boxShadow: '0 8px 24px rgba(10, 62, 34, 0.3)' }}>
+          <ShoppingBag size={18} color="#E8AF30" />
+          <span style={{ fontWeight: 600 }}>{realtimeAlert}</span>
+          <button
+            onClick={() => setRealtimeAlert(null)}
+            style={{ marginLeft: '12px', background: 'none', border: 'none', color: '#A7F3D0', cursor: 'pointer', fontSize: '1.1rem' }}
+          >
+            ✕
+          </button>
         </div>
       )}
 

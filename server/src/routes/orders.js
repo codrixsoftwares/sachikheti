@@ -1,6 +1,7 @@
 import express from 'express';
 import prisma from '../prisma.js';
 import { verifyAdminToken } from '../middleware/auth.js';
+import { broadcastRealtimeUpdate } from '../lib/broadcast.js';
 
 const router = express.Router();
 
@@ -50,10 +51,10 @@ router.post('/', async (req, res) => {
       }
     });
 
-    // Real-time WebSocket IO Broadcast
+    // Real-time WebSocket IO Broadcast with Live Overview Metrics
     const io = req.app.get('io');
     if (io) {
-      io.emit('orders:updated', { action: 'create', order });
+      await broadcastRealtimeUpdate(io, 'orders:updated', { action: 'create', order: { ...order, status: order.orderStatus } });
     }
 
     res.status(201).json({
@@ -86,9 +87,10 @@ router.get('/', verifyAdminToken, async (req, res) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Parse JSON string items for client convenience
+    // Parse JSON string items for client convenience & provide status alias
     const formattedOrders = orders.map(order => ({
       ...order,
+      status: order.orderStatus,
       items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items
     }));
 
@@ -140,7 +142,7 @@ router.patch('/:id/status', verifyAdminToken, async (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
-      io.emit('orders:updated', { action: 'status_update', order: updated });
+      await broadcastRealtimeUpdate(io, 'orders:updated', { action: 'status_update', order: { ...updated, status: updated.orderStatus } });
     }
 
     res.json({ success: true, message: 'Order status updated', data: updated });
@@ -186,7 +188,7 @@ router.put('/:id', verifyAdminToken, async (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
-      io.emit('orders:updated', { action: 'update', order: updated });
+      await broadcastRealtimeUpdate(io, 'orders:updated', { action: 'update', order: { ...updated, status: updated.orderStatus } });
     }
 
     res.json({ success: true, message: 'Order updated successfully', data: updated });
@@ -206,7 +208,7 @@ router.delete('/:id', verifyAdminToken, async (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
-      io.emit('orders:updated', { action: 'delete', id });
+      await broadcastRealtimeUpdate(io, 'orders:updated', { action: 'delete', id });
     }
 
     res.json({ success: true, message: 'Order deleted successfully from database' });
