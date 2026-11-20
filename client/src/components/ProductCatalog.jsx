@@ -121,24 +121,13 @@ export default function ProductCatalog({
     addToCart(product, 1);
   };
 
-  // On Home page, display the 4 core agricultural catalogs
+  // On Home page, display all featured products marked by the admin (4 in a line horizontally)
   let displayedProducts = products;
   if (isHome) {
-    const ghee =
-      products.find((p) => p.category?.slug === 'dairy' && p.title.includes('Ghee')) ||
-      products.find((p) => p.category?.slug === 'dairy');
-    const oil =
-      products.find((p) => p.category?.slug === 'produce' && p.title.includes('Mustard')) ||
-      products.find((p) => p.category?.slug === 'produce');
-    const pinni =
-      products.find((p) => p.category?.slug === 'sweets' && p.title.includes('Pinni')) ||
-      products.find((p) => p.category?.slug === 'sweets');
-    const manure =
-      products.find((p) => p.category?.slug === 'manure' && p.title.includes('Vermicompost')) ||
-      products.find((p) => p.category?.slug === 'manure');
-
-    const top4 = [ghee, oil, pinni, manure].filter(Boolean);
-    displayedProducts = top4.length === 4 ? top4 : products.slice(0, 4);
+    const featuredList = products.filter((p) => Boolean(p.featured));
+    // If the admin has marked products as featured, display all of them!
+    // Otherwise fallback to showing the products list.
+    displayedProducts = featuredList.length > 0 ? featuredList : products;
   }
 
   return (
@@ -147,23 +136,21 @@ export default function ProductCatalog({
         {/* Title & Search Bar */}
         <div className="catalog-header">
           <div className="catalog-title-col">
-            {!isHome && (
-              <span
-                className="badge badge-gold"
-                style={{
-                  marginBottom: '8px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                LFPC Certified Catalog
-              </span>
-            )}
+            <span
+              className="badge badge-gold"
+              style={{
+                marginBottom: '8px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              {isHome ? 'Featured Agricultural Catalogs' : 'LFPC Certified Catalog'}
+            </span>
             <h2 className="catalog-h2">Direct From Farm To Table</h2>
             <p className="catalog-subtitle">
               {isHome
-                ? 'Handcrafted pure dairy, wood-pressed oils, desi sweets, and certified organic manure.'
+                ? 'Handcrafted pure dairy, desi sweets, organic produce, and agricultural machinery handpicked by LFPC.'
                 : 'Handcrafted pure dairy, farm-grade fertilizers, and reliable agricultural machinery.'}
             </p>
           </div>
