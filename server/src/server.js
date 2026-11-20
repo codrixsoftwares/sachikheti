@@ -12,6 +12,7 @@ import productsRouter from './routes/products.js';
 import ordersRouter from './routes/orders.js';
 import paymentRouter from './routes/payment.js';
 import bannersRouter from './routes/banners.js';
+import uploadRouter from './routes/upload.js';
 
 dotenv.config();
 
@@ -34,15 +35,23 @@ const io = new SocketIOServer(server, {
 app.set('io', io);
 
 io.on('connection', (socket) => {
-  // console.log(`[WebSocket] Client connected: ${socket.id}`);
+  // Client connected
   socket.on('disconnect', () => {
-    // console.log(`[WebSocket] Client disconnected: ${socket.id}`);
+    // Client disconnected
   });
 });
 
-// Middleware
+// Middleware with high payload limit for image uploads
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+// Static upload file serving
+const publicUploadsPath = path.join(__dirname, '../../client/public/uploads');
+app.use('/uploads', express.static(publicUploadsPath, {
+  maxAge: '7d',
+  immutable: true,
+}));
 
 // API Routes
 app.use('/api/auth', authRouter);
@@ -51,11 +60,13 @@ app.use('/api/products', productsRouter);
 app.use('/api/orders', ordersRouter);
 app.use('/api/payment/razorpay', paymentRouter);
 app.use('/api/banners', bannersRouter);
+app.use('/api/upload', uploadRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({
+  res.status(200).json({
     status: 'ok',
+    statusCode: 200,
     service: 'SachiKheti API (LFPC)',
     time: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
@@ -64,10 +75,12 @@ app.get('/api/health', (req, res) => {
 
 // Serve frontend build if deployed together on single EC2
 const clientDistPath = path.join(__dirname, '../../client/dist');
-app.use(express.static(clientDistPath));
+app.use(express.static(clientDistPath, {
+  maxAge: '1d',
+}));
 
 app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api')) {
+  if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
     return next();
   }
   res.sendFile(path.join(clientDistPath, 'index.html'), (err) => {
@@ -80,7 +93,11 @@ app.get('*', (req, res, next) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Unhandled server error:', err);
-  res.status(500).json({ success: false, message: 'Internal server error occurred.' });
+  res.status(500).json({
+    success: false,
+    statusCode: 500,
+    message: err.message || 'Internal server error occurred.',
+  });
 });
 
 server.listen(PORT, () => {
@@ -88,3 +105,4 @@ server.listen(PORT, () => {
   console.log(`📡 WebSocket IO active on ws://localhost:${PORT}`);
   console.log(`📡 Health check: http://localhost:${PORT}/api/health`);
 });
+

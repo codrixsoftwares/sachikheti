@@ -11,20 +11,35 @@ router.post('/login', async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
-      return res.status(400).json({ success: false, message: 'Username and password are required.' });
+      return res.status(400).json({
+        success: false,
+        statusCode: 400,
+        code: 'VALIDATION_ERROR',
+        message: 'Username and password are required.',
+      });
     }
 
     const admin = await prisma.admin.findUnique({
-      where: { username },
+      where: { username: username.trim() },
     });
 
     if (!admin) {
-      return res.status(401).json({ success: false, message: 'Invalid admin credentials.' });
+      return res.status(401).json({
+        success: false,
+        statusCode: 401,
+        code: 'INVALID_CREDENTIALS',
+        message: 'Invalid admin username or password.',
+      });
     }
 
     const isMatch = await bcrypt.compare(password, admin.passwordHash);
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid admin credentials.' });
+      return res.status(401).json({
+        success: false,
+        statusCode: 401,
+        code: 'INVALID_CREDENTIALS',
+        message: 'Invalid admin username or password.',
+      });
     }
 
     const token = jwt.sign(
@@ -33,9 +48,10 @@ router.post('/login', async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
-    res.json({
+    res.status(200).json({
       success: true,
-      message: 'Login successful',
+      statusCode: 200,
+      message: 'Login successful. Database session verified.',
       token,
       admin: {
         id: admin.id,
@@ -45,7 +61,12 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ success: false, message: 'Server error during login.' });
+    res.status(500).json({
+      success: false,
+      statusCode: 500,
+      message: 'Server error during admin authentication.',
+      error: error.message,
+    });
   }
 });
 
@@ -53,7 +74,12 @@ router.post('/login', async (req, res) => {
 router.get('/me', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, message: 'No token provided' });
+    return res.status(401).json({
+      success: false,
+      statusCode: 401,
+      code: 'UNAUTHORIZED',
+      message: 'No authorization token provided.',
+    });
   }
 
   try {
@@ -65,13 +91,35 @@ router.get('/me', async (req, res) => {
     });
 
     if (!admin) {
-      return res.status(404).json({ success: false, message: 'Admin not found' });
+      return res.status(404).json({
+        success: false,
+        statusCode: 404,
+        message: 'Admin account not found in database.',
+      });
     }
 
-    res.json({ success: true, admin });
+    res.status(200).json({
+      success: true,
+      statusCode: 200,
+      admin,
+    });
   } catch (err) {
-    res.status(401).json({ success: false, message: 'Invalid token' });
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({
+        success: false,
+        statusCode: 401,
+        code: 'TOKEN_EXPIRED',
+        message: 'Session has expired. Please log in again.',
+      });
+    }
+    return res.status(401).json({
+      success: false,
+      statusCode: 401,
+      code: 'INVALID_TOKEN',
+      message: 'Invalid authorization token.',
+    });
   }
 });
 
 export default router;
+

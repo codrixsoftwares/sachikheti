@@ -62,8 +62,8 @@ export default function AdminDashboard({ onClose }) {
   });
 
   // Login form state
-  const [username, setUsername] = useState('SachiKhetiAdmin');
-  const [password, setPassword] = useState('Sachi@Kheti123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
 
@@ -228,22 +228,15 @@ export default function AdminDashboard({ onClose }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!supabaseConfig.isConfigured) {
-      setCatalogUploadStatus('Supabase is not configured yet. Click Connect Supabase.');
-      setShowSupabaseModal(true);
-      return;
-    }
-
     try {
       setUploadingCatalogImg(true);
-      setCatalogUploadStatus('Uploading to Supabase CDN...');
+      setCatalogUploadStatus('Uploading image...');
       const res = await uploadImageToSupabase(file, 'catalogs');
       if (res.success) {
         setCatalogForm((prev) => ({ ...prev, imageUrl: res.url }));
-        setCatalogUploadStatus('✓ Uploaded to Supabase CDN successfully!');
+        setCatalogUploadStatus(res.isLocalFallback ? '✓ Image saved to local server storage!' : '✓ Uploaded to Supabase CDN successfully!');
       } else {
         setCatalogUploadStatus(`Upload failed: ${res.error}`);
-        if (res.hint) alert(`${res.error}\n\nHint: ${res.hint}`);
       }
     } catch (err) {
       setCatalogUploadStatus(`Error: ${err.message}`);
@@ -424,25 +417,16 @@ export default function AdminDashboard({ onClose }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!supabaseConfig.isConfigured) {
-      setUploadStatus('Supabase Anon Key is not set. Please connect Supabase first.');
-      setShowSupabaseModal(true);
-      return;
-    }
-
     try {
       setUploadingImg(true);
-      setUploadStatus('Uploading to Supabase Storage...');
+      setUploadStatus('Uploading image...');
       const res = await uploadImageToSupabase(file, 'products');
 
       if (res.success) {
         setProductForm((prev) => ({ ...prev, imageUrl: res.url }));
-        setUploadStatus('✓ Uploaded to Supabase CDN successfully!');
+        setUploadStatus(res.isLocalFallback ? '✓ Image saved to local server storage!' : '✓ Uploaded to Supabase CDN successfully!');
       } else {
         setUploadStatus(`Upload failed: ${res.error}`);
-        if (res.hint) {
-          alert(`${res.error}\n\nGuide: ${res.hint}`);
-        }
       }
     } catch (err) {
       setUploadStatus(`Upload error: ${err.message}`);
@@ -523,6 +507,8 @@ export default function AdminDashboard({ onClose }) {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="form-input"
+                  autoComplete="username"
+                  placeholder="Enter admin username"
                 />
               </div>
 
@@ -534,16 +520,12 @@ export default function AdminDashboard({ onClose }) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="form-input"
+                  autoComplete="current-password"
+                  placeholder="Enter admin password"
                 />
               </div>
 
-              <div style={{ background: '#FAF9F3', border: '1px solid #E7E3D4', borderRadius: '8px', padding: '10px', fontSize: '0.8rem', color: '#7A8B80', marginBottom: '20px', textAlign: 'left' }}>
-                🔑 <strong>Configured Credentials:</strong><br />
-                Username: <code>SachiKhetiAdmin</code><br />
-                Password: <code>Sachi@Kheti123</code>
-              </div>
-
-              <button type="submit" disabled={loggingIn} className="btn btn-gold" style={{ width: '100%' }}>
+              <button type="submit" disabled={loggingIn} className="btn btn-gold" style={{ width: '100%', marginTop: '10px' }}>
                 {loggingIn ? 'Authenticating...' : 'Log In to Superadmin'}
               </button>
 

@@ -3,7 +3,12 @@ import jwt from 'jsonwebtoken';
 export const verifyAdminToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, message: 'Access denied. No token provided.' });
+    return res.status(401).json({
+      success: false,
+      statusCode: 401,
+      code: 'UNAUTHORIZED',
+      message: 'Access denied. No authorization token provided.',
+    });
   }
 
   const token = authHeader.split(' ')[1];
@@ -12,6 +17,20 @@ export const verifyAdminToken = (req, res, next) => {
     req.admin = decoded;
     next();
   } catch (error) {
-    return res.status(403).json({ success: false, message: 'Invalid or expired token.' });
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({
+        success: false,
+        statusCode: 401,
+        code: 'TOKEN_EXPIRED',
+        message: 'Admin session has expired. Please log in again.',
+      });
+    }
+    return res.status(401).json({
+      success: false,
+      statusCode: 401,
+      code: 'INVALID_TOKEN',
+      message: 'Invalid authorization token. Please log in again.',
+    });
   }
 };
+

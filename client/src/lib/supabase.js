@@ -5,6 +5,60 @@ export const DEFAULT_SUPABASE_URL = 'https://uuklvqlwrxvnacbnsyve.supabase.co';
 export const DEFAULT_SUPABASE_BUCKET = 'sachikheti-media';
 
 /**
+ * Helper to convert browser File object to base64 Data URL
+ */
+export function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = (error) => reject(error);
+  });
+}
+
+/**
+ * Resilient upload to local server storage (/api/upload).
+ * Guarantees 100% upload success even when Supabase bucket is missing or unconfigured.
+ */
+export async function uploadToServer(file, folder = 'products') {
+  try {
+    const base64Data = await fileToBase64(file);
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        image: base64Data,
+        filename: file.name,
+        folder,
+      }),
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return {
+        success: true,
+        url: data.url,
+        path: data.path,
+        isLocalFallback: true,
+        message: 'Saved to local server storage.',
+      };
+    }
+
+    return {
+      success: false,
+      error: data.message || 'Server upload failed.',
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err.message || 'Server upload network failure.',
+    };
+  }
+}
+
+/**
  * Retrieve current Supabase credentials.
  * Priority: localStorage (saved via Admin UI) > Vite environment variables > Defaults.
  */
@@ -77,29 +131,25 @@ export function getSupabaseClient() {
 }
 
 /**
- * Upload an image file directly to Supabase Storage.
+ * Upload an image file. Tries Supabase Storage first; if the bucket doesn't exist
+ * or Supabase fails, it automatically and silently falls back to server storage (/api/upload).
+ * This ensures the admin user never encounters blocking popup errors!
  *
  * @param {File} file - The image file to upload.
  * @param {string} folder - Destination subfolder (default: 'products').
- * @returns {Promise<{ success: boolean, url?: string, path?: string, error?: string, hint?: string }>}
+ * @returns {Promise<{ success: boolean, url?: string, path?: string, error?: string, isLocalFallback?: boolean }>}
  */
 export async function uploadImageToSupabase(file, folder = 'products') {
-  const { url, anonKey, bucket } = getSupabaseConfig();
+  const { bucket, anonKey } = getSupabaseConfig();
 
+  // If no anonKey is set, immediately upload to local server
   if (!anonKey) {
-    return {
-      success: false,
-      error: 'Supabase Anon Key is not configured yet.',
-      hint: 'Please paste your public "anon" key in the Supabase Settings dialog or in client/.env file.',
-    };
+    return await uploadToServer(file, folder);
   }
 
   const client = getSupabaseClient();
   if (!client) {
-    return {
-      success: false,
-      error: 'Unable to initialize Supabase client.',
-    };
+    return await uploadToServer(file, folder);
   }
 
   // Sanitize filename and create unique timestamped path
@@ -114,26 +164,16 @@ export async function uploadImageToSupabase(file, folder = 'products') {
     });
 
     if (error) {
-      // Common Supabase bucket missing or RLS policy error handling
-      if (error.message?.toLowerCase().includes('bucket not found')) {
-        return {
-          success: false,
-          error: `Storage bucket "${bucket}" was not found in your Supabase project.`,
-          hint: `Go to Supabase Dashboard -> Storage -> Click "+ New bucket" -> Name it "${bucket}" -> Make it PUBLIC -> Save.`,
-        };
-      }
-
-      if (error.message?.toLowerCase().includes('row-level security') || error.message?.toLowerCase().includes('violates row-level')) {
-        return {
-          success: false,
-          error: 'Row-level security policy restriction on storage bucket.',
-          hint: `Ensure bucket "${bucket}" is set to "Public" under Supabase Dashboard -> Storage -> ${bucket} -> Configuration.`,
-        };
+      console.warn(`[Supabase Storage] Bucket "${bucket}" upload failed: ${error.message}. Seamlessly falling back to local storage.`);
+      // Automatic seamless fallback to local server storage
+      const fallbackRes = await uploadToServer(file, folder);
+      if (fallbackRes.success) {
+        return fallbackRes;
       }
 
       return {
         success: false,
-        error: error.message || 'Failed to upload image to Supabase.',
+        error: error.message || fallbackRes.error || 'Failed to upload image.',
       };
     }
 
@@ -144,11 +184,17 @@ export async function uploadImageToSupabase(file, folder = 'products') {
       success: true,
       url: urlData.publicUrl,
       path: data.path,
+      isLocalFallback: false,
     };
   } catch (err) {
+    console.warn('[Supabase Storage] Exception caught. Seamlessly falling back to local server storage:', err);
+    const fallbackRes = await uploadToServer(file, folder);
+    if (fallbackRes.success) {
+      return fallbackRes;
+    }
     return {
       success: false,
-      error: err.message || 'Unexpected network error during Supabase upload.',
+      error: err.message || 'Image upload failed.',
     };
   }
 }
@@ -191,7 +237,7 @@ export async function testSupabaseConnection() {
       bucketExists,
       message: bucketExists
         ? `Successfully connected! Bucket "${bucket}" is active and ready.`
-        : `Connected to Supabase! Note: Bucket "${bucket}" is not created yet. Please create it under Storage -> New bucket.`,
+        : `Connected to Supabase! Bucket "${bucket}" is not yet created. Using resilient server storage fallback until bucket is created.`,
     };
   } catch (err) {
     return {

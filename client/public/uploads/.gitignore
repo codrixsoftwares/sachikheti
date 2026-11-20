@@ -1,0 +1,4 @@
+# Keep uploads folder in git
+*
+!.gitignore
+!.gitkeep

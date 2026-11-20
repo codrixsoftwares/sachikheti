@@ -58,8 +58,8 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const [productUploadStatus, setProductUploadStatus] = useState('');
 
   // Login form state
-  const [username, setUsername] = useState('SachiKhetiAdmin');
-  const [password, setPassword] = useState('Sachi@Kheti123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
 
@@ -210,22 +210,15 @@ export default function AdminPortalPage({ onNavigateHome }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!supabaseConfig.isConfigured) {
-      setCategoryUploadStatus('Supabase is not configured yet. Please click Connect Supabase.');
-      setShowSupabaseModal(true);
-      return;
-    }
-
     try {
       setUploadingCategoryImg(true);
-      setCategoryUploadStatus('Uploading to Supabase CDN...');
+      setCategoryUploadStatus('Uploading image...');
       const res = await uploadImageToSupabase(file, 'catalogs');
       if (res.success) {
         setCategoryForm((prev) => ({ ...prev, imageUrl: res.url }));
-        setCategoryUploadStatus('✓ Uploaded to Supabase CDN!');
+        setCategoryUploadStatus(res.isLocalFallback ? '✓ Image saved to local server storage!' : '✓ Uploaded to Supabase CDN!');
       } else {
         setCategoryUploadStatus(`Upload failed: ${res.error}`);
-        if (res.hint) alert(`${res.error}\n\nHint: ${res.hint}`);
       }
     } catch (err) {
       setCategoryUploadStatus(`Error: ${err.message}`);
@@ -238,22 +231,15 @@ export default function AdminPortalPage({ onNavigateHome }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!supabaseConfig.isConfigured) {
-      setProductUploadStatus('Supabase is not configured yet. Please click Connect Supabase.');
-      setShowSupabaseModal(true);
-      return;
-    }
-
     try {
       setUploadingProductImg(true);
-      setProductUploadStatus('Uploading to Supabase CDN...');
+      setProductUploadStatus('Uploading image...');
       const res = await uploadImageToSupabase(file, 'products');
       if (res.success) {
         setProductForm((prev) => ({ ...prev, imageUrl: res.url }));
-        setProductUploadStatus('✓ Uploaded to Supabase CDN!');
+        setProductUploadStatus(res.isLocalFallback ? '✓ Image saved to local server storage!' : '✓ Uploaded to Supabase CDN!');
       } else {
         setProductUploadStatus(`Upload failed: ${res.error}`);
-        if (res.hint) alert(`${res.error}\n\nHint: ${res.hint}`);
       }
     } catch (err) {
       setProductUploadStatus(`Error: ${err.message}`);
@@ -929,6 +915,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="form-input"
+                autoComplete="username"
                 placeholder="Enter admin username"
               />
             </div>
@@ -941,6 +928,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="form-input"
+                autoComplete="current-password"
                 placeholder="Enter password"
               />
             </div>
