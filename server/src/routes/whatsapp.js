@@ -2,6 +2,8 @@ import express from 'express';
 import {
   initWhatsApp,
   getWhatsAppStatus,
+  syncWhatsApp,
+  resetWhatsApp,
   disconnectWhatsApp,
   sendWhatsAppMessage
 } from '../lib/whatsapp.js';
@@ -9,7 +11,7 @@ import { requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// GET /api/whatsapp/status
+// GET /api/whatsapp/status - get single-device connection status
 router.get('/status', (req, res) => {
   try {
     const status = getWhatsAppStatus();
@@ -19,7 +21,7 @@ router.get('/status', (req, res) => {
   }
 });
 
-// POST /api/whatsapp/start - initiate Baileys QR generation
+// POST /api/whatsapp/start - initiate single Baileys session / generate QR code
 router.post('/start', requireAdmin, async (req, res) => {
   try {
     const forceNew = Boolean(req.body.forceNew);
@@ -30,17 +32,37 @@ router.post('/start', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/whatsapp/disconnect - logout / reset session
-router.post('/disconnect', requireAdmin, async (req, res) => {
+// POST /api/whatsapp/sync - probe live Baileys socket & broadcast verified status
+router.post('/sync', requireAdmin, async (req, res) => {
   try {
-    const result = await disconnectWhatsApp(true);
-    res.json({ success: true, ...result });
+    const result = await syncWhatsApp();
+    res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// POST /api/whatsapp/send - send message to customer (e.g. bill or receipt)
+// POST /api/whatsapp/reset - hard reset session, wipe storage & generate fresh QR
+router.post('/reset', requireAdmin, async (req, res) => {
+  try {
+    const result = await resetWhatsApp();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/whatsapp/disconnect - graceful logout & clean session teardown
+router.post('/disconnect', requireAdmin, async (req, res) => {
+  try {
+    const result = await disconnectWhatsApp();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/whatsapp/send - send bill or order notification
 router.post('/send', requireAdmin, async (req, res) => {
   try {
     const { phone, message } = req.body;

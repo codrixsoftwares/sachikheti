@@ -136,6 +136,8 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const [settingsSubTab, setSettingsSubTab] = useState('ribbon'); // 'ribbon', 'whatsapp', 'bill'
   const [whatsappStatus, setWhatsappStatus] = useState({ status: 'DISCONNECTED', qr: null, user: null });
   const [loadingWhatsApp, setLoadingWhatsApp] = useState(false);
+  const [syncingWhatsApp, setSyncingWhatsApp] = useState(false);
+  const [resettingWhatsApp, setResettingWhatsApp] = useState(false);
   const [whatsappTestPhone, setWhatsappTestPhone] = useState('');
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
 
@@ -1089,8 +1091,55 @@ export default function AdminPortalPage({ onNavigateHome }) {
   };
 
   // ==========================================
-  // WHATSAPP BAILEYS CONNECTION HANDLERS
+  // WHATSAPP BAILEYS CONNECTION HANDLERS (SINGLE-DEVICE LIFECYCLE)
   // ==========================================
+  const handleSyncWhatsApp = async () => {
+    try {
+      setSyncingWhatsApp(true);
+      const res = await fetch('/api/whatsapp/sync', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWhatsappStatus(data);
+        setActionSuccess('✓ Single-device WhatsApp session synchronized & probed!');
+        setTimeout(() => setActionSuccess(''), 4000);
+      } else {
+        alert(data.message || 'Failed to sync WhatsApp session');
+      }
+    } catch (err) {
+      alert('Error syncing WhatsApp: ' + err.message);
+    } finally {
+      setSyncingWhatsApp(false);
+    }
+  };
+
+  const handleResetWhatsApp = async () => {
+    if (!window.confirm('⚠️ Hard Reset Session: This will wipe all stored WhatsApp authentication keys on the server and immediately generate a fresh, clean QR code for scanning. Proceed?')) {
+      return;
+    }
+    try {
+      setResettingWhatsApp(true);
+      const res = await fetch('/api/whatsapp/reset', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWhatsappStatus(data);
+        setActionSuccess('✓ Session hard-reset complete! Fresh QR code generated below.');
+        setTimeout(() => setActionSuccess(''), 5000);
+      } else {
+        alert(data.message || 'Failed to reset session');
+      }
+    } catch (err) {
+      alert('Error resetting session: ' + err.message);
+    } finally {
+      setResettingWhatsApp(false);
+    }
+  };
+
   const handleStartWhatsApp = async (forceNew = false) => {
     try {
       setLoadingWhatsApp(true);
@@ -3596,9 +3645,9 @@ export default function AdminPortalPage({ onNavigateHome }) {
                 </div>
               )}
 
-              {/* SUB-TAB 2: WHATSAPP BAILEYS INTEGRATION */}
+              {/* SUB-TAB 2: WHATSAPP BAILEYS INTEGRATION (SINGLE ACTIVE DEVICE ENFORCED) */}
               {settingsSubTab === 'whatsapp' && (
-                <div style={{ maxWidth: '820px' }}>
+                <div style={{ maxWidth: '860px' }}>
                   <div
                     style={{
                       background: '#FFFFFF',
@@ -3609,39 +3658,119 @@ export default function AdminPortalPage({ onNavigateHome }) {
                       marginBottom: '20px',
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px' }}>
+                    {/* Header with Title and Single-Device Security Badge */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '14px', marginBottom: '20px' }}>
                       <div>
-                        <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1F2937', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <MessageSquare size={22} color="#15733E" />
-                          <span>WhatsApp Baileys Headless Client</span>
-                        </h3>
+                          <h3 style={{ fontSize: '1.18rem', fontWeight: 800, color: '#1F2937', margin: 0 }}>
+                            WhatsApp Baileys Headless Connection
+                          </h3>
+                        </div>
                         <p style={{ fontSize: '0.84rem', color: '#6B7280', marginTop: '4px' }}>
                           Direct server-side WhatsApp Web session for automated invoice & bill dispatching without opening external apps.
                         </p>
                       </div>
 
-                      {/* Status Indicator Badge */}
-                      <div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '4px 10px',
+                            borderRadius: '20px',
+                            background: '#EFF6FF',
+                            color: '#1D4ED8',
+                            fontSize: '0.74rem',
+                            fontWeight: 800,
+                            border: '1px solid #BFDBFE',
+                          }}
+                        >
+                          🔒 Single Active Device Enforced
+                        </span>
+
                         {whatsappStatus?.status === 'CONNECTED' ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: '#D1FAE5', color: '#065F46', fontWeight: 800, fontSize: '0.84rem', border: '1px solid #A7F3D0' }}>
-                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#059669' }} />
-                            Connected as +{whatsappStatus.user?.phone || 'Mobile'}
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '20px', background: '#D1FAE5', color: '#065F46', fontWeight: 800, fontSize: '0.82rem', border: '1px solid #A7F3D0' }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#059669', boxShadow: '0 0 6px #059669' }} />
+                            Live +{whatsappStatus.user?.phone || 'Connected'}
                           </span>
                         ) : whatsappStatus?.status === 'SCAN_QR' ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: '#FEF3C7', color: '#92400E', fontWeight: 800, fontSize: '0.84rem', border: '1px solid #FDE68A' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '20px', background: '#FEF3C7', color: '#92400E', fontWeight: 800, fontSize: '0.82rem', border: '1px solid #FDE68A' }}>
                             <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#D97706' }} />
-                            Awaiting QR Code Scan
+                            Awaiting QR Scan
                           </span>
                         ) : whatsappStatus?.status === 'CONNECTING' ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: '#EFF6FF', color: '#1D4ED8', fontWeight: 800, fontSize: '0.84rem', border: '1px solid #BFDBFE' }}>
-                            <RefreshCw size={13} className="spin" />
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '20px', background: '#EFF6FF', color: '#1D4ED8', fontWeight: 800, fontSize: '0.82rem', border: '1px solid #BFDBFE' }}>
+                            <RefreshCw size={12} className="spin" />
                             Connecting Baileys...
                           </span>
                         ) : (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: '#F3F4F6', color: '#4B5563', fontWeight: 700, fontSize: '0.84rem', border: '1px solid #E5E7EB' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '20px', background: '#F3F4F6', color: '#4B5563', fontWeight: 700, fontSize: '0.82rem', border: '1px solid #E5E7EB' }}>
                             <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#9CA3AF' }} />
                             Disconnected
                           </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Prominent Action Controls Bar (Sync, Hard Reset, Disconnect) */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '10px',
+                        background: '#F9FAFB',
+                        padding: '12px 16px',
+                        borderRadius: '12px',
+                        border: '1px solid #E5E7EB',
+                        marginBottom: '20px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        {/* Sync Button */}
+                        <button
+                          type="button"
+                          onClick={handleSyncWhatsApp}
+                          disabled={syncingWhatsApp}
+                          className="btn btn-secondary btn-sm"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                          title="Probe live Baileys socket and sync status across all admin portals"
+                        >
+                          <RefreshCw size={14} className={syncingWhatsApp ? 'spin' : ''} />
+                          <span>{syncingWhatsApp ? 'Syncing...' : 'Sync & Refresh Status'}</span>
+                        </button>
+
+                        {/* Hard Reset Button */}
+                        <button
+                          type="button"
+                          onClick={handleResetWhatsApp}
+                          disabled={resettingWhatsApp}
+                          className="btn btn-secondary btn-sm text-red"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                          title="Wipe stored credentials and generate brand new QR code"
+                        >
+                          <Trash2 size={14} className={resettingWhatsApp ? 'spin' : ''} />
+                          <span>{resettingWhatsApp ? 'Resetting...' : 'Hard Reset Session'}</span>
+                        </button>
+                      </div>
+
+                      <div>
+                        {/* Disconnect Button */}
+                        {whatsappStatus?.status === 'CONNECTED' && (
+                          <button
+                            type="button"
+                            onClick={handleDisconnectWhatsApp}
+                            disabled={loadingWhatsApp}
+                            className="btn btn-secondary btn-sm text-red"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                            title="Unlink device and close socket cleanly"
+                          >
+                            <LogOut size={14} />
+                            <span>Disconnect WhatsApp</span>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -3661,12 +3790,12 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           margin: '18px 0',
                         }}
                       >
-                        <h4 style={{ fontSize: '1rem', fontWeight: 800, color: '#15733E', marginBottom: '8px' }}>
+                        <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#15733E', marginBottom: '8px' }}>
                           Scan with WhatsApp on your Mobile Phone
                         </h4>
-                        <p style={{ fontSize: '0.84rem', color: '#4B5563', maxWidth: '440px', marginBottom: '16px' }}>
-                          1. Open <strong>WhatsApp</strong> on your mobile.<br />
-                          2. Tap <strong>Settings</strong> or <strong>Three Dots (⋮)</strong> &gt; <strong>Linked Devices</strong>.<br />
+                        <p style={{ fontSize: '0.84rem', color: '#4B5563', maxWidth: '460px', marginBottom: '16px', lineHeight: 1.5 }}>
+                          1. Open <strong>WhatsApp</strong> on your mobile phone.<br />
+                          2. Tap <strong>Settings</strong> (iOS) or <strong>Three Dots ⋮</strong> (Android) &gt; <strong>Linked Devices</strong>.<br />
                           3. Tap <strong>Link a Device</strong> and point your camera at this QR code:
                         </p>
 
@@ -3675,18 +3804,28 @@ export default function AdminPortalPage({ onNavigateHome }) {
                             background: '#FFFFFF',
                             padding: '16px',
                             borderRadius: '16px',
-                            boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+                            boxShadow: '0 6px 24px rgba(0,0,0,0.08)',
                             border: '1px solid #E5E7EB',
                           }}
                         >
                           <img
                             src={whatsappStatus.qr}
                             alt="WhatsApp Baileys QR Code"
-                            style={{ width: '240px', height: '240px', display: 'block', borderRadius: '8px' }}
+                            style={{ width: '250px', height: '250px', display: 'block', borderRadius: '8px' }}
                           />
                         </div>
 
                         <div style={{ marginTop: '16px', display: 'flex', gap: '10px' }}>
+                          <button
+                            type="button"
+                            onClick={handleSyncWhatsApp}
+                            disabled={syncingWhatsApp}
+                            className="btn btn-primary btn-sm"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                          >
+                            <RefreshCw size={14} className={syncingWhatsApp ? 'spin' : ''} />
+                            <span>I Scanned It (Check Status)</span>
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleStartWhatsApp(true)}
@@ -3695,7 +3834,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                           >
                             <RefreshCw size={14} className={loadingWhatsApp ? 'spin' : ''} />
-                            <span>Regenerate New QR</span>
+                            <span>Regenerate QR</span>
                           </button>
                         </div>
                       </div>
@@ -3703,32 +3842,42 @@ export default function AdminPortalPage({ onNavigateHome }) {
 
                     {/* Connected View */}
                     {whatsappStatus?.status === 'CONNECTED' ? (
-                      <div style={{ background: '#F0FDF4', borderRadius: '12px', border: '1px solid #BBF7D0', padding: '18px', marginTop: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                          <div>
-                            <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#166534' }}>
-                              ✓ Session Verified & Active
-                            </div>
-                            <div style={{ fontSize: '0.82rem', color: '#15803D', marginTop: '2px' }}>
-                              All virtual bills, payment links, and receipts can now be dispatched instantly with zero redirection.
+                      <div style={{ background: '#F0FDF4', borderRadius: '12px', border: '1px solid #BBF7D0', padding: '20px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '18px' }}>
+                          <div style={{ background: '#FFFFFF', padding: '12px 14px', borderRadius: '10px', border: '1px solid #DCFCE7' }}>
+                            <div style={{ fontSize: '0.74rem', color: '#166534', fontWeight: 700, textTransform: 'uppercase' }}>Connected Mobile</div>
+                            <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#14532D', marginTop: '2px' }}>
+                              +{whatsappStatus.user?.phone || '8360253372'}
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={handleDisconnectWhatsApp}
-                            disabled={loadingWhatsApp}
-                            className="btn btn-secondary btn-sm text-red"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                          >
-                            <LogOut size={14} />
-                            <span>Disconnect WhatsApp Session</span>
-                          </button>
+
+                          <div style={{ background: '#FFFFFF', padding: '12px 14px', borderRadius: '10px', border: '1px solid #DCFCE7' }}>
+                            <div style={{ fontSize: '0.74rem', color: '#166534', fontWeight: 700, textTransform: 'uppercase' }}>Session Mode</div>
+                            <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#14532D', marginTop: '2px' }}>
+                              Single Dedicated Server Instance
+                            </div>
+                          </div>
+
+                          <div style={{ background: '#FFFFFF', padding: '12px 14px', borderRadius: '10px', border: '1px solid #DCFCE7' }}>
+                            <div style={{ fontSize: '0.74rem', color: '#166534', fontWeight: 700, textTransform: 'uppercase' }}>Live Connectivity</div>
+                            <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#166534', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#16a34a' }} />
+                              WebSocket Open & Ready
+                            </div>
+                          </div>
+
+                          <div style={{ background: '#FFFFFF', padding: '12px 14px', borderRadius: '10px', border: '1px solid #DCFCE7' }}>
+                            <div style={{ fontSize: '0.74rem', color: '#166534', fontWeight: 700, textTransform: 'uppercase' }}>Last Synced</div>
+                            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#4B5563', marginTop: '2px' }}>
+                              {whatsappStatus.lastSyncedAt ? new Date(whatsappStatus.lastSyncedAt).toLocaleTimeString('en-IN') : 'Just now'}
+                            </div>
+                          </div>
                         </div>
 
                         {/* Test Message Form */}
-                        <form onSubmit={handleSendTestWhatsApp} style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px solid #DCFCE7' }}>
-                          <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#166534', display: 'block', marginBottom: '6px' }}>
-                            Send Test Verification Message
+                        <form onSubmit={handleSendTestWhatsApp} style={{ paddingTop: '16px', borderTop: '1px solid #DCFCE7' }}>
+                          <label style={{ fontSize: '0.82rem', fontWeight: 800, color: '#166534', display: 'block', marginBottom: '6px' }}>
+                            Send Test Ping Message to Customer / Farmer Phone
                           </label>
                           <div style={{ display: 'flex', gap: '10px' }}>
                             <input
@@ -3755,28 +3904,41 @@ export default function AdminPortalPage({ onNavigateHome }) {
                       /* Disconnected View Action */
                       whatsappStatus?.status !== 'SCAN_QR' && (
                         <div style={{ marginTop: '14px' }}>
-                          <p style={{ fontSize: '0.84rem', color: '#4B5563', marginBottom: '14px' }}>
-                            Click below to generate a real-time QR code. Once scanned, your WhatsApp account will be linked to the backend for direct invoice broadcasting.
+                          <p style={{ fontSize: '0.84rem', color: '#4B5563', marginBottom: '16px', lineHeight: 1.5 }}>
+                            Connecting your WhatsApp mobile app enables single-device automated dispatch. All virtual bills, customized invoices, and rental booking slips created in the Customer Store will be sent directly to the customer's phone without opening external browser windows.
                           </p>
-                          <button
-                            type="button"
-                            onClick={() => handleStartWhatsApp(false)}
-                            disabled={loadingWhatsApp}
-                            className="btn btn-primary"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-                          >
-                            {loadingWhatsApp ? (
-                              <>
-                                <RefreshCw size={16} className="spin" />
-                                <span>Generating QR Code...</span>
-                              </>
-                            ) : (
-                              <>
-                                <QrCode size={18} />
-                                <span>Connect WhatsApp (Show QR Code)</span>
-                              </>
-                            )}
-                          </button>
+                          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleStartWhatsApp(false)}
+                              disabled={loadingWhatsApp}
+                              className="btn btn-primary"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                            >
+                              {loadingWhatsApp ? (
+                                <>
+                                  <RefreshCw size={16} className="spin" />
+                                  <span>Generating QR Code...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <QrCode size={18} />
+                                  <span>Connect WhatsApp (Show QR Code)</span>
+                                </>
+                              )}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={handleResetWhatsApp}
+                              disabled={resettingWhatsApp}
+                              className="btn btn-secondary text-red"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                            >
+                              <Trash2 size={16} className={resettingWhatsApp ? 'spin' : ''} />
+                              <span>Reset Stored Credentials</span>
+                            </button>
+                          </div>
                         </div>
                       )
                     )}
