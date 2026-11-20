@@ -2745,35 +2745,35 @@ export default function AdminPortalPage({ onNavigateHome }) {
           {/* ==================================================== */}
           {(activeTab === 'customer-store' || activeTab === 'billing') && (
             <div className="admin-tab-view pos-terminal-tab-view">
-              <div className="admin-view-header" style={{ marginBottom: '14px', flexShrink: 0 }}>
+              <div className="admin-view-header" style={{ marginBottom: '8px', flexShrink: 0 }}>
                 <div>
-                  <h1 className="admin-view-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Store size={28} color="#15733E" />
+                  <h1 className="admin-view-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.45rem', margin: 0 }}>
+                    <Store size={24} color="#15733E" />
                     <span>Customer Store & Virtual POS</span>
                   </h1>
-                  <p className="admin-view-sub">
-                    Browse the complete store catalogs, filter direct sale produce vs. rental machinery, and assemble a live virtual bill with one-click print/download and direct WhatsApp dispatch.
+                  <p className="admin-view-sub" style={{ fontSize: '0.82rem', marginTop: '2px', marginBottom: 0 }}>
+                    Select catalog products to build a live virtual invoice with WhatsApp dispatch and rental agreement terms.
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <button
                     type="button"
                     onClick={() => setShowCustomItemModal(true)}
-                    className="btn btn-secondary"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    className="btn btn-secondary btn-sm"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '6px 12px', fontSize: '0.8rem' }}
                   >
-                    <Plus size={16} />
-                    <span>+ Add Custom Line Item</span>
+                    <Plus size={15} />
+                    <span>+ Custom Item</span>
                   </button>
                   {billingCart.length > 0 && (
                     <button
                       type="button"
                       onClick={clearBillingCart}
-                      className="btn btn-secondary text-red"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      className="btn btn-secondary btn-sm text-red"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '6px 12px', fontSize: '0.8rem' }}
                     >
-                      <Trash2 size={15} />
-                      <span>Clear Cart</span>
+                      <Trash2 size={14} />
+                      <span>Clear</span>
                     </button>
                   )}
                 </div>
@@ -2782,15 +2782,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
               {/* Responsive 2-Column Split: Customer Store Catalogs (Left) + Live Virtual Bill (Right) */}
               <div
                 className="pos-split-container"
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'minmax(0, 1.35fr) minmax(380px, 450px)',
-                  gap: '20px',
-                  alignItems: 'stretch',
-                  flex: '1 1 auto',
-                  minHeight: 0,
-                  overflow: 'hidden',
-                }}
               >
                 {/* LEFT: Customer Store Catalog Browser (Independently Scrollable) */}
                 <div
@@ -2798,18 +2789,18 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   style={{
                     height: '100%',
                     overflowY: 'auto',
-                    paddingRight: '12px',
+                    paddingRight: '8px',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '16px',
+                    gap: '14px',
                   }}
                 >
                   {/* Product Cards Grid */}
                   <div
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-                      gap: '14px',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+                      gap: '12px',
                     }}
                   >
                     {products
@@ -2968,7 +2959,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   style={{
                     height: '100%',
                     background: '#FFFFFF',
-                    borderRadius: '16px',
+                    borderRadius: '14px',
                     border: `2px solid ${billDesign.accentColor}`,
                     boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
                     display: 'flex',
@@ -2976,428 +2967,432 @@ export default function AdminPortalPage({ onNavigateHome }) {
                     overflow: 'hidden',
                   }}
                 >
-                  {/* Bill Slip Customized Header */}
-                  <div
-                    style={{
-                      padding: '12px 18px',
-                      background: billDesign.accentColor,
-                      color: '#FFFFFF',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '3px',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {billDesign.showLogo && (
-                          <img
-                            src="/assets/brand/sachi-kheti-emblem.jpg"
-                            alt="Emblem"
-                            style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', background: '#FFFFFF' }}
-                          />
-                        )}
-                        <span style={{ fontWeight: 900, fontSize: '0.98rem', letterSpacing: '0.3px' }}>
-                          {billDesign.companyName}
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '0.72rem', background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
-                        Live Virtual Bill
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '0.72rem', opacity: 0.9 }}>
-                      {billDesign.tagline}
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', opacity: 0.85, marginTop: '2px' }}>
-                      <span>📍 {billDesign.address}</span>
-                      <span>📞 {billDesign.phone}</span>
-                    </div>
-                  </div>
-
-                  {/* Bill Number & Cart Count Bar */}
-                  <div
-                    style={{
-                      padding: '8px 18px',
-                      borderBottom: '1px solid #E5E7EB',
-                      background: '#F9FAFB',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#374151' }}>
-                      {billDesign.billTitle}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '0.76rem', color: '#6B7280' }}>
-                        {billingCart.reduce((sum, it) => sum + it.quantity, 0)} Items
-                      </span>
-                      <span style={{ fontSize: '0.86rem', fontWeight: 800, color: billDesign.accentColor }}>
-                        ₹{billingSubtotal.toLocaleString('en-IN')}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Cart Items List */}
-                  <div
-                    className="pos-cart-items-scroll"
-                    style={{
-                      padding: '12px 16px',
-                      flex: '1 1 auto',
-                      minHeight: '80px',
-                      overflowY: 'auto',
-                      borderBottom: '1px solid #E5E7EB',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px',
-                    }}
-                  >
-                    {billingCart.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '28px 12px', color: '#7A8B80' }}>
-                        <ShoppingCart size={32} color="#D1D5DB" style={{ margin: '0 auto 8px' }} />
-                        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#4B5563' }}>Virtual Bill is Empty</div>
-                        <div style={{ fontSize: '0.78rem', marginTop: '4px' }}>
-                          Click "+ Add to Virtual Bill" on any catalog product to start billing.
-                        </div>
-                      </div>
-                    ) : (
-                      billingCart.map((item) => (
-                        <div
-                          key={item.id}
-                          style={{
-                            padding: '10px 12px',
-                            background: '#F9FAFB',
-                            borderRadius: '10px',
-                            border: '1px solid #F3F4F6',
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                            <div style={{ flex: 1, minWidth: 0, paddingRight: '8px' }}>
-                              <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#1F2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {item.title}
-                              </div>
-                              <span style={{ fontSize: '0.72rem', color: '#6B7280' }}>Unit: {item.unit}</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => removeFromBillingCart(item.id)}
-                              style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '2px' }}
-                              title="Remove item"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                            {/* Quantity Controls */}
-                            <div style={{ display: 'flex', alignItems: 'center', background: '#FFFFFF', borderRadius: '6px', border: '1px solid #D1D5DB' }}>
-                              <button
-                                type="button"
-                                onClick={() => updateCartQty(item.id, -1)}
-                                style={{ padding: '4px 8px', background: 'none', border: 'none', cursor: 'pointer', color: '#374151' }}
-                              >
-                                <Minus size={12} />
-                              </button>
-                              <span style={{ fontSize: '0.84rem', fontWeight: 700, minWidth: '24px', textAlign: 'center' }}>
-                                {item.quantity}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => updateCartQty(item.id, 1)}
-                                style={{ padding: '4px 8px', background: 'none', border: 'none', cursor: 'pointer', color: '#374151' }}
-                              >
-                                <Plus size={12} />
-                              </button>
-                            </div>
-
-                            {/* Price Override Input */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                              <span style={{ fontSize: '0.82rem', color: '#6B7280' }}>₹</span>
-                              <input
-                                type="number"
-                                value={item.price}
-                                onChange={(e) => updateCartPrice(item.id, e.target.value)}
-                                style={{
-                                  width: '74px',
-                                  padding: '4px 6px',
-                                  fontSize: '0.84rem',
-                                  fontWeight: 600,
-                                  borderRadius: '6px',
-                                  border: '1px solid #D1D5DB',
-                                  textAlign: 'right',
-                                }}
-                                title="Custom rate per unit"
-                              />
-                            </div>
-
-                            {/* Line Total */}
-                            <div style={{ fontSize: '0.88rem', fontWeight: 800, color: billDesign.accentColor, minWidth: '70px', textAlign: 'right' }}>
-                              ₹{(item.price * item.quantity).toLocaleString('en-IN')}
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  {/* Customer Information Panel */}
-                  <div style={{ padding: '10px 16px', borderBottom: '1px solid #E5E7EB', background: '#FFFFFF', flexShrink: 0 }}>
-                    <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
-                      Customer & Payment Details
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        <div>
-                          <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '2px' }}>
-                            Customer Name *
-                          </label>
-                          <input
-                            type="text"
-                            value={billingCustomer.name}
-                            onChange={(e) => setBillingCustomer({ ...billingCustomer, name: e.target.value })}
-                            placeholder="e.g. Gurpreet Singh"
-                            className="form-input"
-                            style={{ margin: 0, padding: '6px 8px', fontSize: '0.8rem' }}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '2px' }}>
-                            Phone / WhatsApp *
-                          </label>
-                          <input
-                            type="text"
-                            value={billingCustomer.phone}
-                            onChange={(e) => setBillingCustomer({ ...billingCustomer, phone: e.target.value })}
-                            placeholder="e.g. 9876543210"
-                            className="form-input"
-                            style={{ margin: 0, padding: '6px 8px', fontSize: '0.8rem' }}
-                          />
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        <div>
-                          <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '2px' }}>
-                            Payment Method
-                          </label>
-                          <select
-                            value={billingCustomer.paymentMethod}
-                            onChange={(e) => setBillingCustomer({ ...billingCustomer, paymentMethod: e.target.value })}
-                            className="form-select"
-                            style={{ margin: 0, padding: '6px 8px', fontSize: '0.8rem' }}
-                          >
-                            <option value="CASH">Cash in Hand / COD</option>
-                            <option value="UPI">UPI / QR Code</option>
-                            <option value="BANK_TRANSFER">Bank Transfer / NEFT</option>
-                            <option value="RAZORPAY">Card / Razorpay</option>
-                            <option value="CREDIT">Khata / Pay Later</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '2px' }}>
-                            Payment Status
-                          </label>
-                          <select
-                            value={billingCustomer.paymentStatus}
-                            onChange={(e) => setBillingCustomer({ ...billingCustomer, paymentStatus: e.target.value })}
-                            className="form-select"
-                            style={{ margin: 0, padding: '6px 8px', fontSize: '0.8rem' }}
-                          >
-                            <option value="PAID">PAID (Complete)</option>
-                            <option value="PENDING">PENDING (Payment Due)</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Bill Type & Agreement Mode Selector */}
-                      <div style={{ marginTop: '4px', paddingTop: '8px', borderTop: '1px dashed #E5E7EB' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#374151', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <FileText size={12} color={billDesign.accentColor} />
-                            <span>Bill & Agreement Type</span>
-                          </label>
-                          <span style={{ fontSize: '0.68rem', color: '#6B7280' }}>
-                            {billingBillType === 'auto' ? '⚡ Auto-Detecting' : 'Custom Mode'}
+                  {/* TIER 1: Pinned Fixed Header (Store Branding & Title) */}
+                  <div className="pos-bill-header-fixed">
+                    <div
+                      style={{
+                        padding: '10px 16px',
+                        background: billDesign.accentColor,
+                        color: '#FFFFFF',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '2px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {billDesign.showLogo && (
+                            <img
+                              src="/assets/brand/sachi-kheti-emblem.jpg"
+                              alt="Emblem"
+                              style={{ width: '26px', height: '26px', borderRadius: '50%', objectFit: 'cover', background: '#FFFFFF' }}
+                            />
+                          )}
+                          <span style={{ fontWeight: 900, fontSize: '0.94rem', letterSpacing: '0.3px' }}>
+                            {billDesign.companyName}
                           </span>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
-                          {[
-                            { id: 'auto', label: '⚡ Auto-Detect' },
-                            { id: 'direct_sale', label: '🛒 Produce Sale' },
-                            { id: 'rental', label: '🚜 Rental Agreement' },
-                            { id: 'combined', label: '🌾 Combined Bill' },
-                          ].map((t) => (
-                            <button
-                              key={t.id}
-                              type="button"
-                              onClick={() => setBillingBillType(t.id)}
-                              style={{
-                                padding: '5px 6px',
-                                fontSize: '0.72rem',
-                                fontWeight: billingBillType === t.id ? 700 : 500,
-                                borderRadius: '6px',
-                                border: billingBillType === t.id ? `1.5px solid ${billDesign.accentColor}` : '1px solid #E5E7EB',
-                                background: billingBillType === t.id ? '#ECFDF5' : '#F9FAFB',
-                                color: billingBillType === t.id ? billDesign.accentColor : '#4B5563',
-                                cursor: 'pointer',
-                                textAlign: 'center',
-                                transition: 'all 0.15s ease',
-                              }}
-                            >
-                              {t.label}
-                            </button>
-                          ))}
-                        </div>
+                        <span style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.22)', padding: '2px 8px', borderRadius: '12px', fontWeight: 800 }}>
+                          Live Virtual Bill
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.7rem', opacity: 0.9 }}>
+                        {billDesign.tagline}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', opacity: 0.85, marginTop: '2px' }}>
+                        <span>📍 {billDesign.address}</span>
+                        <span>📞 {billDesign.phone}</span>
+                      </div>
+                    </div>
+
+                    {/* Bill Title & Subtotal Bar */}
+                    <div
+                      style={{
+                        padding: '7px 16px',
+                        borderBottom: '1px solid #E5E7EB',
+                        background: '#F9FAFB',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#374151' }}>
+                        {billDesign.billTitle}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '0.74rem', color: '#6B7280' }}>
+                          {billingCart.reduce((sum, it) => sum + it.quantity, 0)} Items
+                        </span>
+                        <span style={{ fontSize: '0.84rem', fontWeight: 800, color: billDesign.accentColor }}>
+                          ₹{billingSubtotal.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* TIER 2: Unified Scrollable Body (Cart Items + Customer Info + Terms + Pricing) */}
+                  <div className="pos-bill-scrollable-body" style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto' }}>
+                    {/* A. Cart Items List */}
+                    <div style={{ padding: '12px 14px', borderBottom: '1px solid #E5E7EB' }}>
+                      <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Billed Items ({billingCart.length})</span>
+                        {billingCart.length > 0 && (
+                          <span style={{ color: '#6B7280', fontWeight: 600 }}>Edit rate or qty below</span>
+                        )}
                       </div>
 
-                      {/* Machinery Custom Hiring & Rental Details Box */}
-                      {(billingBillType === 'rental' || billingBillType === 'combined' || (billingBillType === 'auto' && billingCart.some(i => i.isRental || i.isForRent || (i.unit && (i.unit.toLowerCase().includes('acre') || i.unit.toLowerCase().includes('hour')))))) && (
-                        <div style={{ marginTop: '6px', padding: '10px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.74rem', fontWeight: 800, color: '#166534' }}>
-                              <Tractor size={14} />
-                              <span>Machinery Rental & Penalty Terms</span>
-                            </div>
-                            <span style={{ fontSize: '0.68rem', padding: '1px 6px', background: '#DCFCE7', color: '#15803D', borderRadius: '10px', fontWeight: 700 }}>
-                              Custom Hiring
-                            </span>
+                      {billingCart.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '24px 12px', color: '#7A8B80', background: '#F9FAFB', borderRadius: '10px', border: '1px dashed #D1D5DB' }}>
+                          <ShoppingCart size={28} color="#9CA3AF" style={{ margin: '0 auto 6px' }} />
+                          <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#374151' }}>Virtual Bill is Empty</div>
+                          <div style={{ fontSize: '0.76rem', color: '#6B7280', marginTop: '2px' }}>
+                            Click "+ Add to Virtual Bill" on any catalog item on the left to add items.
                           </div>
+                        </div>
+                      ) : (
+                        <div className="pos-cart-items-scroll">
+                          {billingCart.map((item) => (
+                            <div
+                              key={item.id}
+                              style={{
+                                padding: '9px 11px',
+                                background: '#F9FAFB',
+                                borderRadius: '8px',
+                                border: '1px solid #E5E7EB',
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                                <div style={{ flex: 1, minWidth: 0, paddingRight: '8px' }}>
+                                  <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#1F2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {item.title}
+                                  </div>
+                                  <span style={{ fontSize: '0.7rem', color: '#6B7280' }}>Unit: {item.unit}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeFromBillingCart(item.id)}
+                                  style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '2px' }}
+                                  title="Remove item"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
 
-                          <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '3px' }}>
-                            Agreed Rental Tenure / Work Capacity:
-                          </label>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px' }}>
-                            {['1 Acre', '2 Acres', '5 Acres', '10 Acres', '1 Hour', '8 Hours', '24 Hours', 'Per Day'].map((chip) => (
-                              <button
-                                key={chip}
-                                type="button"
-                                onClick={() => setBillingRentalDetails({ ...billingRentalDetails, tenure: chip })}
-                                style={{
-                                  padding: '2px 7px',
-                                  fontSize: '0.7rem',
-                                  borderRadius: '12px',
-                                  border: billingRentalDetails.tenure === chip ? '1.5px solid #16A34A' : '1px solid #D1D5DB',
-                                  background: billingRentalDetails.tenure === chip ? '#16A34A' : '#FFFFFF',
-                                  color: billingRentalDetails.tenure === chip ? '#FFFFFF' : '#374151',
-                                  fontWeight: billingRentalDetails.tenure === chip ? 700 : 500,
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                {chip}
-                              </button>
-                            ))}
-                          </div>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                {/* Quantity Stepper */}
+                                <div style={{ display: 'flex', alignItems: 'center', background: '#FFFFFF', borderRadius: '6px', border: '1px solid #D1D5DB' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateCartQty(item.id, -1)}
+                                    style={{ padding: '3px 7px', background: 'none', border: 'none', cursor: 'pointer', color: '#374151' }}
+                                  >
+                                    <Minus size={11} />
+                                  </button>
+                                  <span style={{ fontSize: '0.82rem', fontWeight: 800, minWidth: '22px', textAlign: 'center' }}>
+                                    {item.quantity}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateCartQty(item.id, 1)}
+                                    style={{ padding: '3px 7px', background: 'none', border: 'none', cursor: 'pointer', color: '#374151' }}
+                                  >
+                                    <Plus size={11} />
+                                  </button>
+                                </div>
 
-                          <input
-                            type="text"
-                            value={billingRentalDetails.tenure}
-                            onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, tenure: e.target.value })}
-                            placeholder="e.g. 5 Acres or 2 Days"
-                            className="form-input"
-                            style={{ margin: '0 0 8px 0', padding: '4px 8px', fontSize: '0.78rem', background: '#FFFFFF' }}
-                          />
+                                {/* Custom Price Override */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <span style={{ fontSize: '0.78rem', color: '#6B7280' }}>₹</span>
+                                  <input
+                                    type="number"
+                                    value={item.price}
+                                    onChange={(e) => updateCartPrice(item.id, e.target.value)}
+                                    style={{
+                                      width: '70px',
+                                      padding: '3px 5px',
+                                      fontSize: '0.82rem',
+                                      fontWeight: 600,
+                                      borderRadius: '4px',
+                                      border: '1px solid #D1D5DB',
+                                      textAlign: 'right',
+                                      background: '#FFFFFF',
+                                    }}
+                                    title="Custom rate per unit"
+                                  />
+                                </div>
 
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '6px' }}>
-                            <div>
-                              <label style={{ fontSize: '0.68rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '2px' }}>
-                                Penalty / Extra Hour (₹)
-                              </label>
-                              <input
-                                type="number"
-                                value={billingRentalDetails.penaltyPerHour}
-                                onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, penaltyPerHour: parseFloat(e.target.value) || 0 })}
-                                className="form-input"
-                                style={{ margin: 0, padding: '4px 6px', fontSize: '0.78rem', background: '#FFFFFF' }}
-                              />
+                                {/* Line Total */}
+                                <div style={{ fontSize: '0.86rem', fontWeight: 800, color: billDesign.accentColor, minWidth: '65px', textAlign: 'right' }}>
+                                  ₹{(item.price * item.quantity).toLocaleString('en-IN')}
+                                </div>
+                              </div>
                             </div>
-                            <div>
-                              <label style={{ fontSize: '0.68rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '2px' }}>
-                                Penalty / Extra Acre (₹)
-                              </label>
-                              <input
-                                type="number"
-                                value={billingRentalDetails.penaltyPerAcre}
-                                onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, penaltyPerAcre: parseFloat(e.target.value) || 0 })}
-                                className="form-input"
-                                style={{ margin: 0, padding: '4px 6px', fontSize: '0.78rem', background: '#FFFFFF' }}
-                              />
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                            <div>
-                              <label style={{ fontSize: '0.68rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '2px' }}>
-                                Grace Period Allowed
-                              </label>
-                              <input
-                                type="text"
-                                value={billingRentalDetails.gracePeriod}
-                                onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, gracePeriod: e.target.value })}
-                                placeholder="e.g. 1 Hour"
-                                className="form-input"
-                                style={{ margin: 0, padding: '4px 6px', fontSize: '0.78rem', background: '#FFFFFF' }}
-                              />
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', paddingTop: '14px' }}>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', fontWeight: 600, color: '#166534', cursor: 'pointer' }}>
-                                <input
-                                  type="checkbox"
-                                  checked={billingRentalDetails.operatorIncluded}
-                                  onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, operatorIncluded: e.target.checked })}
-                                />
-                                <span>Operator Included</span>
-                              </label>
-                            </div>
-                          </div>
+                          ))}
                         </div>
                       )}
                     </div>
+
+                    {/* B. Customer & Payment Information */}
+                    <div style={{ padding: '12px 14px', borderBottom: '1px solid #E5E7EB', background: '#FFFFFF' }}>
+                      <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '8px' }}>
+                        Customer & Payment Details
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          <div>
+                            <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '2px' }}>
+                              Customer Name *
+                            </label>
+                            <input
+                              type="text"
+                              value={billingCustomer.name}
+                              onChange={(e) => setBillingCustomer({ ...billingCustomer, name: e.target.value })}
+                              placeholder="e.g. Gurpreet Singh"
+                              className="form-input"
+                              style={{ margin: 0, padding: '5px 8px', fontSize: '0.78rem' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '2px' }}>
+                              Phone / WhatsApp *
+                            </label>
+                            <input
+                              type="text"
+                              value={billingCustomer.phone}
+                              onChange={(e) => setBillingCustomer({ ...billingCustomer, phone: e.target.value })}
+                              placeholder="e.g. 9876543210"
+                              className="form-input"
+                              style={{ margin: 0, padding: '5px 8px', fontSize: '0.78rem' }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          <div>
+                            <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '2px' }}>
+                              Payment Method
+                            </label>
+                            <select
+                              value={billingCustomer.paymentMethod}
+                              onChange={(e) => setBillingCustomer({ ...billingCustomer, paymentMethod: e.target.value })}
+                              className="form-select"
+                              style={{ margin: 0, padding: '5px 8px', fontSize: '0.78rem' }}
+                            >
+                              <option value="CASH">Cash in Hand / COD</option>
+                              <option value="UPI">UPI / QR Code</option>
+                              <option value="BANK_TRANSFER">Bank Transfer / NEFT</option>
+                              <option value="RAZORPAY">Card / Razorpay</option>
+                              <option value="CREDIT">Khata / Pay Later</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '2px' }}>
+                              Payment Status
+                            </label>
+                            <select
+                              value={billingCustomer.paymentStatus}
+                              onChange={(e) => setBillingCustomer({ ...billingCustomer, paymentStatus: e.target.value })}
+                              className="form-select"
+                              style={{ margin: 0, padding: '5px 8px', fontSize: '0.78rem' }}
+                            >
+                              <option value="PAID">PAID (Complete)</option>
+                              <option value="PENDING">PENDING (Payment Due)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Bill Type & Agreement Mode Selector */}
+                        <div style={{ marginTop: '2px', paddingTop: '6px', borderTop: '1px dashed #E5E7EB' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#374151', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <FileText size={12} color={billDesign.accentColor} />
+                              <span>Bill & Agreement Type</span>
+                            </label>
+                            <span style={{ fontSize: '0.66rem', color: '#6B7280' }}>
+                              {billingBillType === 'auto' ? '⚡ Auto-Detecting' : 'Custom Mode'}
+                            </span>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+                            {[
+                              { id: 'auto', label: '⚡ Auto-Detect' },
+                              { id: 'direct_sale', label: '🛒 Produce Sale' },
+                              { id: 'rental', label: '🚜 Rental Agreement' },
+                              { id: 'combined', label: '🌾 Combined Bill' },
+                            ].map((t) => (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => setBillingBillType(t.id)}
+                                style={{
+                                  padding: '4px 6px',
+                                  fontSize: '0.7rem',
+                                  fontWeight: billingBillType === t.id ? 700 : 500,
+                                  borderRadius: '6px',
+                                  border: billingBillType === t.id ? `1.5px solid ${billDesign.accentColor}` : '1px solid #E5E7EB',
+                                  background: billingBillType === t.id ? '#ECFDF5' : '#F9FAFB',
+                                  color: billingBillType === t.id ? billDesign.accentColor : '#4B5563',
+                                  cursor: 'pointer',
+                                  textAlign: 'center',
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                {t.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Machinery Custom Hiring & Rental Details Box */}
+                        {(billingBillType === 'rental' || billingBillType === 'combined' || (billingBillType === 'auto' && billingCart.some(i => i.isRental || i.isForRent || (i.unit && (i.unit.toLowerCase().includes('acre') || i.unit.toLowerCase().includes('hour')))))) && (
+                          <div style={{ marginTop: '4px', padding: '8px 10px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', fontWeight: 800, color: '#166534' }}>
+                                <Tractor size={13} />
+                                <span>Machinery Rental & Penalty Terms</span>
+                              </div>
+                              <span style={{ fontSize: '0.66rem', padding: '1px 5px', background: '#DCFCE7', color: '#15803D', borderRadius: '8px', fontWeight: 700 }}>
+                                Custom Hiring
+                              </span>
+                            </div>
+
+                            <label style={{ fontSize: '0.68rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '2px' }}>
+                              Agreed Rental Tenure / Work Capacity:
+                            </label>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginBottom: '5px' }}>
+                              {['1 Acre', '2 Acres', '5 Acres', '10 Acres', '1 Hour', '8 Hours', '24 Hours', 'Per Day'].map((chip) => (
+                                <button
+                                  key={chip}
+                                  type="button"
+                                  onClick={() => setBillingRentalDetails({ ...billingRentalDetails, tenure: chip })}
+                                  style={{
+                                    padding: '2px 6px',
+                                    fontSize: '0.68rem',
+                                    borderRadius: '10px',
+                                    border: billingRentalDetails.tenure === chip ? '1.5px solid #16A34A' : '1px solid #D1D5DB',
+                                    background: billingRentalDetails.tenure === chip ? '#16A34A' : '#FFFFFF',
+                                    color: billingRentalDetails.tenure === chip ? '#FFFFFF' : '#374151',
+                                    fontWeight: billingRentalDetails.tenure === chip ? 700 : 500,
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  {chip}
+                                </button>
+                              ))}
+                            </div>
+
+                            <input
+                              type="text"
+                              value={billingRentalDetails.tenure}
+                              onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, tenure: e.target.value })}
+                              placeholder="e.g. 5 Acres or 2 Days"
+                              className="form-input"
+                              style={{ margin: '0 0 6px 0', padding: '3px 6px', fontSize: '0.76rem', background: '#FFFFFF' }}
+                            />
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '6px' }}>
+                              <div>
+                                <label style={{ fontSize: '0.66rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '1px' }}>
+                                  Penalty / Extra Hour (₹)
+                                </label>
+                                <input
+                                  type="number"
+                                  value={billingRentalDetails.penaltyPerHour}
+                                  onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, penaltyPerHour: parseFloat(e.target.value) || 0 })}
+                                  className="form-input"
+                                  style={{ margin: 0, padding: '3px 5px', fontSize: '0.76rem', background: '#FFFFFF' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.66rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '1px' }}>
+                                  Penalty / Extra Acre (₹)
+                                </label>
+                                <input
+                                  type="number"
+                                  value={billingRentalDetails.penaltyPerAcre}
+                                  onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, penaltyPerAcre: parseFloat(e.target.value) || 0 })}
+                                  className="form-input"
+                                  style={{ margin: 0, padding: '3px 5px', fontSize: '0.76rem', background: '#FFFFFF' }}
+                                />
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                              <div>
+                                <label style={{ fontSize: '0.66rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '1px' }}>
+                                  Grace Period Allowed
+                                </label>
+                                <input
+                                  type="text"
+                                  value={billingRentalDetails.gracePeriod}
+                                  onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, gracePeriod: e.target.value })}
+                                  placeholder="e.g. 1 Hour"
+                                  className="form-input"
+                                  style={{ margin: 0, padding: '3px 5px', fontSize: '0.76rem', background: '#FFFFFF' }}
+                                />
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', paddingTop: '10px' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', fontWeight: 600, color: '#166534', cursor: 'pointer' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={billingRentalDetails.operatorIncluded}
+                                    onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, operatorIncluded: e.target.checked })}
+                                  />
+                                  <span>Operator Included</span>
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* C. Pricing Adjustments: Subtotal, Discount & Delivery */}
+                    <div style={{ padding: '12px 14px', background: '#F9FAFB' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#4B5563', marginBottom: '4px' }}>
+                        <span>Subtotal:</span>
+                        <span style={{ fontWeight: 700, color: '#1F2937' }}>₹{billingSubtotal.toLocaleString('en-IN')}</span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: '#4B5563', marginBottom: '4px' }}>
+                        <span>Discount / Concession:</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          <span>-₹</span>
+                          <input
+                            type="number"
+                            value={billingDiscount}
+                            onChange={(e) => setBillingDiscount(parseFloat(e.target.value) || 0)}
+                            style={{ width: '65px', padding: '2px 5px', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid #D1D5DB', textAlign: 'right', background: '#FFFFFF' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: '#4B5563' }}>
+                        <span>Delivery / Freight:</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          <span>+₹</span>
+                          <input
+                            type="number"
+                            value={billingDelivery}
+                            onChange={(e) => setBillingDelivery(parseFloat(e.target.value) || 0)}
+                            style={{ width: '65px', padding: '2px 5px', fontSize: '0.78rem', borderRadius: '4px', border: '1px solid #D1D5DB', textAlign: 'right', background: '#FFFFFF' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Pricing Breakdown & Disount */}
-                  <div style={{ padding: '12px 16px', background: '#F9FAFB', flexShrink: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#4B5563', marginBottom: '5px' }}>
-                      <span>Subtotal:</span>
-                      <span style={{ fontWeight: 600 }}>₹{billingSubtotal.toLocaleString('en-IN')}</span>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', color: '#4B5563', marginBottom: '5px' }}>
-                      <span>Discount / Concession:</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <span>-₹</span>
-                        <input
-                          type="number"
-                          value={billingDiscount}
-                          onChange={(e) => setBillingDiscount(parseFloat(e.target.value) || 0)}
-                          style={{ width: '65px', padding: '3px 6px', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid #D1D5DB', textAlign: 'right' }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', color: '#4B5563', marginBottom: '10px' }}>
-                      <span>Delivery / Freight:</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <span>+₹</span>
-                        <input
-                          type="number"
-                          value={billingDelivery}
-                          onChange={(e) => setBillingDelivery(parseFloat(e.target.value) || 0)}
-                          style={{ width: '65px', padding: '3px 6px', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid #D1D5DB', textAlign: 'right' }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: '8px', borderTop: '2px dashed #E5E7EB' }}>
-                      <span style={{ fontSize: '0.96rem', fontWeight: 800, color: '#1F2937' }}>Grand Total:</span>
-                      <span style={{ fontSize: '1.4rem', fontWeight: 900, color: billDesign.accentColor }}>
+                  {/* TIER 3: Pinned Fixed Footer (Grand Total, Print, WhatsApp & Save Actions) */}
+                  <div className="pos-bill-footer-fixed">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '10px' }}>
+                      <span style={{ fontSize: '0.94rem', fontWeight: 800, color: '#1F2937' }}>Grand Total:</span>
+                      <span style={{ fontSize: '1.35rem', fontWeight: 900, color: billDesign.accentColor }}>
                         ₹{billingGrandTotal.toLocaleString('en-IN')}
                       </span>
                     </div>
 
                     {/* Quick Print & WhatsApp Action Buttons */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
                       <button
                         type="button"
                         onClick={handleDirectPrintVirtualBill}
@@ -3408,12 +3403,12 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           alignItems: 'center',
                           justifyContent: 'center',
                           gap: '6px',
-                          padding: '9px 10px',
-                          fontSize: '0.84rem',
+                          padding: '8px 10px',
+                          fontSize: '0.82rem',
                           fontWeight: 700,
                         }}
                       >
-                        <Printer size={15} />
+                        <Printer size={14} />
                         <span>Print Preview</span>
                       </button>
 
@@ -3427,15 +3422,15 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           alignItems: 'center',
                           justifyContent: 'center',
                           gap: '6px',
-                          padding: '9px 10px',
-                          fontSize: '0.84rem',
+                          padding: '8px 10px',
+                          fontSize: '0.82rem',
                           fontWeight: 700,
                           color: '#15803D',
                           borderColor: '#BBF7D0',
                           background: '#F0FDF4',
                         }}
                       >
-                        {sendingBillPdf ? <RefreshCw size={15} className="spin" /> : <Send size={15} />}
+                        {sendingBillPdf ? <RefreshCw size={14} className="spin" /> : <Send size={14} />}
                         <span>
                           {sendingBillPdf
                             ? 'Sending PDF...'
@@ -3454,9 +3449,8 @@ export default function AdminPortalPage({ onNavigateHome }) {
                       className="btn btn-primary"
                       style={{
                         width: '100%',
-                        marginTop: '10px',
-                        padding: '12px',
-                        fontSize: '0.94rem',
+                        padding: '11px',
+                        fontSize: '0.92rem',
                         fontWeight: 800,
                         display: 'flex',
                         alignItems: 'center',
@@ -3468,12 +3462,12 @@ export default function AdminPortalPage({ onNavigateHome }) {
                     >
                       {generatingBill ? (
                         <>
-                          <RefreshCw size={17} className="spin" />
+                          <RefreshCw size={16} className="spin" />
                           <span>Recording Official Invoice...</span>
                         </>
                       ) : (
                         <>
-                          <Receipt size={17} />
+                          <Receipt size={16} />
                           <span>Save & Finalize Bill (₹{billingGrandTotal.toLocaleString('en-IN')})</span>
                         </>
                       )}

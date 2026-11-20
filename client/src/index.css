@@ -4545,33 +4545,41 @@ a {
 /* CUSTOMER STORE & POS TERMINAL 2-COLUMN SPLIT LAYOUT  */
 /* ==================================================== */
 .admin-portal-main.pos-active-main {
-  overflow-y: hidden;
-  padding: 20px 28px;
+  overflow: hidden !important;
+  padding: 14px 24px !important;
+  height: calc(100vh - 68px) !important;
+  max-height: calc(100vh - 68px) !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 .pos-terminal-tab-view {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 40px);
-  min-height: 560px;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 0 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
 }
 
 .pos-split-container {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(380px, 450px);
-  gap: 20px;
-  align-items: stretch;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.35fr) minmax(380px, 450px) !important;
+  gap: 16px !important;
+  align-items: stretch !important;
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  overflow: hidden !important;
 }
 
 .pos-catalog-scroll {
-  height: 100%;
-  overflow-y: auto;
-  padding-right: 12px;
-  scrollbar-width: thin;
-  scrollbar-color: #CBD5E1 #F1F5F9;
+  height: 100% !important;
+  overflow-y: auto !important;
+  padding-right: 8px !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #CBD5E1 #F1F5F9 !important;
 }
 
 .pos-catalog-scroll::-webkit-scrollbar {
@@ -4590,38 +4598,69 @@ a {
 }
 
 .pos-bill-fixed {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: #FFFFFF;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-  overflow: hidden;
+  height: 100% !important;
+  max-height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: #FFFFFF !important;
+  border-radius: 14px !important;
+  border: 2px solid #15733E !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08) !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.pos-bill-header-fixed {
+  flex-shrink: 0 !important;
+}
+
+.pos-bill-scrollable-body {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #CBD5E1 #F9FAFB !important;
+}
+
+.pos-bill-scrollable-body::-webkit-scrollbar {
+  width: 6px;
+}
+.pos-bill-scrollable-body::-webkit-scrollbar-track {
+  background: #F9FAFB;
+}
+.pos-bill-scrollable-body::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+.pos-bill-scrollable-body::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+.pos-bill-footer-fixed {
+  flex-shrink: 0 !important;
+  border-top: 2px solid #E5E7EB !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 -4px 14px rgba(0,0,0,0.04) !important;
+  padding: 12px 16px !important;
 }
 
 .pos-cart-items-scroll {
-  flex: 1 1 auto;
-  min-height: 80px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #CBD5E1 #F9FAFB;
-}
-
-.pos-cart-items-scroll::-webkit-scrollbar {
-  width: 5px;
-}
-.pos-cart-items-scroll::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
-  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 @media (max-width: 1024px) {
   .admin-portal-main.pos-active-main {
-    overflow-y: auto;
-    padding: 20px 16px;
+    overflow-y: auto !important;
+    padding: 16px !important;
+    height: auto !important;
+    max-height: none !important;
   }
   .pos-terminal-tab-view {
     height: auto !important;
+    overflow: visible !important;
   }
   .pos-split-container {
     display: flex !important;
@@ -4636,6 +4675,12 @@ a {
   }
   .pos-bill-fixed {
     height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  .pos-bill-scrollable-body {
+    height: auto !important;
+    max-height: none !important;
     overflow: visible !important;
   }
 }
