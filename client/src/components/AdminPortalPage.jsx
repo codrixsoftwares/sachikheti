@@ -154,6 +154,8 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const [historyDatePreset, setHistoryDatePreset] = useState('all'); // 'all', 'today', 'yesterday', '7days', '30days'
   const [historySort, setHistorySort] = useState('newest'); // 'newest', 'oldest', 'highest', 'lowest'
   const [historyViewMode, setHistoryViewMode] = useState('table'); // 'table', 'cards'
+  const [historyActiveSheet, setHistoryActiveSheet] = useState('all'); // 'all', 'pos', 'rental', 'due', 'online'
+  const [selectedHistoryRowId, setSelectedHistoryRowId] = useState(null);
 
   const [customItemForm, setCustomItemForm] = useState({
     title: '',
@@ -196,6 +198,12 @@ export default function AdminPortalPage({ onNavigateHome }) {
     authorizedSignatoryTitle: 'Authorized Store Manager (LFPC Ltd.)'
   });
   const [savingBillDesign, setSavingBillDesign] = useState(false);
+
+  // Quick Stock & Quantity Adjustment Modal state
+  const [stockModalProduct, setStockModalProduct] = useState(null);
+  const [stockQuantityInput, setStockQuantityInput] = useState(50);
+  const [stockStatusToggle, setStockStatusToggle] = useState(true);
+  const [savingStockModal, setSavingStockModal] = useState(false);
 
   // Product Add / Edit Modal state
   const [showProductModal, setShowProductModal] = useState(false);
@@ -713,22 +721,62 @@ export default function AdminPortalPage({ onNavigateHome }) {
 
   const handleToggleStock = async (product) => {
     try {
+      const nextStock = !product.inStock;
+      const nextCount = nextStock ? (product.stockCount > 0 ? product.stockCount : 50) : 0;
       const res = await fetch(`/api/products/${product.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ inStock: !product.inStock })
+        body: JSON.stringify({ inStock: nextStock, stockCount: nextCount })
       });
       const data = await res.json();
       if (data.success) {
-        setActionSuccess(`Stock status for "${product.title}" updated.`);
+        setActionSuccess(`✓ "${product.title}" is now ${nextStock ? `IN STOCK (${nextCount} units)` : 'OUT OF STOCK (0 units)'}.`);
         setTimeout(() => setActionSuccess(''), 3000);
         loadAllData();
       }
     } catch (err) {
       alert('Error updating stock status');
+    }
+  };
+
+  const openStockModal = (product) => {
+    setStockModalProduct(product);
+    const qty = product.stockCount !== undefined && product.stockCount !== null ? product.stockCount : (product.inStock ? 50 : 0);
+    setStockQuantityInput(qty);
+    setStockStatusToggle(Boolean(product.inStock && qty > 0));
+  };
+
+  const handleSaveStockModal = async (e) => {
+    if (e) e.preventDefault();
+    if (!stockModalProduct) return;
+    setSavingStockModal(true);
+    try {
+      const qty = Math.max(0, parseInt(stockQuantityInput, 10) || 0);
+      const isStock = stockStatusToggle && qty > 0;
+      const res = await fetch(`/api/products/${stockModalProduct.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ inStock: isStock, stockCount: qty })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActionSuccess(`✓ "${stockModalProduct.title}" stock updated: ${isStock ? `IN STOCK (${qty} units)` : 'OUT OF STOCK (0 units)'}`);
+        setTimeout(() => setActionSuccess(''), 4000);
+        setStockModalProduct(null);
+        loadAllData();
+      } else {
+        alert(data.message || 'Failed to update stock');
+      }
+    } catch (err) {
+      alert('Error updating stock and quantity');
+    } finally {
+      setSavingStockModal(false);
     }
   };
 
@@ -1867,6 +1915,27 @@ export default function AdminPortalPage({ onNavigateHome }) {
 
     const isPos = (o.orderNumber || '').startsWith('SK-BILL') || (o.notes || '').includes('[Custom POS Bill]');
     const isWhatsapp = o.paymentMethod === 'WHATSAPP';
+
+    // Excel Sheet Tab Filtering
+    if (historyActiveSheet === 'pos' && !isPos) return false;
+    if (historyActiveSheet === 'due' && (o.paymentStatus || 'PENDING').toUpperCase() !== 'PENDING') return false;
+    if (historyActiveSheet === 'online' && (isPos || isWhatsapp)) return false;
+    if (historyActiveSheet === 'rental') {
+      const notes = (o.notes || '').toLowerCase();
+      let hasRent = notes.includes('rental') || notes.includes('tenure') || notes.includes('penalty');
+      if (!hasRent) {
+        try {
+          const its = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
+          hasRent = (its || []).some(it => {
+            const u = (it.unit || '').toLowerCase();
+            const t = (it.title || it.name || '').toLowerCase();
+            return it.isRental || it.isForRent || u.includes('acre') || u.includes('hour') || t.includes('tractor');
+          });
+        } catch (e) {}
+      }
+      if (!hasRent) return false;
+    }
+
     if (historyTypeFilter === 'pos' && !isPos) return false;
     if (historyTypeFilter === 'whatsapp' && !isWhatsapp) return false;
     if (historyTypeFilter === 'store' && (isPos || isWhatsapp)) return false;
@@ -1921,6 +1990,22 @@ export default function AdminPortalPage({ onNavigateHome }) {
     (o) => (o.orderNumber || '').startsWith('SK-BILL') || (o.notes || '').includes('[Custom POS Bill]')
   ).length;
   const historyStoreOrdersCount = orders.length - historyPosBillsCount;
+  const historyRentalCount = orders.filter((o) => {
+    const notes = (o.notes || '').toLowerCase();
+    if (notes.includes('rental') || notes.includes('tenure') || notes.includes('penalty')) return true;
+    try {
+      const its = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
+      return (its || []).some((it) => {
+        const u = (it.unit || '').toLowerCase();
+        const t = (it.title || it.name || '').toLowerCase();
+        return it.isRental || it.isForRent || u.includes('acre') || u.includes('hour') || t.includes('tractor');
+      });
+    } catch (e) {
+      return false;
+    }
+  }).length;
+  const historyDueCount = orders.filter((o) => (o.paymentStatus || '').toUpperCase() === 'PENDING').length;
+  const selectedOrderRecord = selectedHistoryRowId ? orders.find((o) => o.id === selectedHistoryRowId) : null;
 
   // KPI Metrics & Analytics Calculations (Real-time Database Synchronized)
   const totalRevenue = serverMetrics?.totalRevenue !== undefined
@@ -2225,186 +2310,162 @@ export default function AdminPortalPage({ onNavigateHome }) {
 
       {/* Main Workspace Layout (Sidebar + Content View) */}
       <div className="admin-portal-body admin-portal-layout">
-        {/* Navigation Sidebar */}
+        {/* Navigation Sidebar (Icon-Only Rail with Floating Hover Tooltips) */}
         <aside className={`admin-portal-sidebar ${sidebarOpen ? 'open' : ''}`}>
           <div className="admin-sidebar-nav">
-            <div className="admin-nav-section-title">Operations</div>
-
+            {/* 1. Overview Metrics */}
             <button
+              type="button"
               onClick={() => { setActiveTab('overview'); setSidebarOpen(false); }}
               className={`admin-nav-item ${activeTab === 'overview' ? 'active' : ''}`}
+              aria-label="Overview Metrics"
+              title="Overview Metrics"
             >
-              <TrendingUp size={18} />
-              <span>Overview Metrics</span>
+              <TrendingUp size={20} />
+              <span className="admin-nav-tooltip">Overview Metrics</span>
             </button>
 
+            {/* 2. Customer Store & POS */}
             <button
+              type="button"
               onClick={() => { setActiveTab('customer-store'); setSidebarOpen(false); }}
               className={`admin-nav-item ${activeTab === 'customer-store' || activeTab === 'billing' ? 'active' : ''}`}
+              aria-label="Customer Store & POS"
+              title="Customer Store & POS"
             >
-              <Store size={18} />
-              <span>Customer Store & POS</span>
+              <Store size={20} />
               {billingCart.length > 0 && (
-                <span className="badge badge-gold" style={{ fontSize: '0.72rem', padding: '2px 7px', marginLeft: 'auto' }}>
+                <span className="admin-nav-icon-badge badge-gold">
                   {billingCart.length}
                 </span>
               )}
+              <span className="admin-nav-tooltip">
+                Customer Store & POS {billingCart.length > 0 ? `(${billingCart.length} in cart)` : ''}
+              </span>
             </button>
 
+            {/* 3. Orders Fulfillment */}
             <button
+              type="button"
               onClick={() => { setActiveTab('orders'); setSidebarOpen(false); }}
               className={`admin-nav-item ${activeTab === 'orders' ? 'active' : ''}`}
+              aria-label="Orders Fulfillment"
+              title="Orders Fulfillment"
             >
-              <ShoppingBag size={18} />
-              <span>Orders Fulfillment</span>
+              <ShoppingBag size={20} />
               {pendingOrdersCount > 0 && (
-                <span className="admin-nav-badge-alert">{pendingOrdersCount}</span>
+                <span className="admin-nav-icon-badge badge-alert">
+                  {pendingOrdersCount}
+                </span>
               )}
+              <span className="admin-nav-tooltip">
+                Orders Fulfillment {pendingOrdersCount > 0 ? `(${pendingOrdersCount} pending)` : ''}
+              </span>
             </button>
 
+            {/* 4. Past Orders & Bills */}
             <button
+              type="button"
               onClick={() => { setActiveTab('history'); setSidebarOpen(false); }}
               className={`admin-nav-item ${activeTab === 'history' ? 'active' : ''}`}
+              aria-label="Past Orders & Bills"
+              title="Past Orders & Bills"
             >
-              <History size={18} />
-              <span>Past Orders & Bills</span>
-              <span className="admin-nav-badge">{orders.length}</span>
+              <History size={20} />
+              {orders.length > 0 && (
+                <span className="admin-nav-icon-badge badge-neutral">
+                  {orders.length}
+                </span>
+              )}
+              <span className="admin-nav-tooltip">
+                Past Orders & Bills ({orders.length})
+              </span>
             </button>
 
-            <div className="admin-nav-section-title" style={{ marginTop: '16px' }}>Catalog Management</div>
-
+            {/* 5. Products Catalog */}
             <button
+              type="button"
               onClick={() => { setActiveTab('products'); setSidebarOpen(false); }}
               className={`admin-nav-item ${activeTab === 'products' ? 'active' : ''}`}
+              aria-label="Products Catalog"
+              title="Products Catalog"
             >
-              <Package size={18} />
-              <span>Products Catalog</span>
-              <span className="admin-nav-badge">{products.length}</span>
+              <Package size={20} />
+              {products.length > 0 && (
+                <span className="admin-nav-icon-badge badge-neutral">
+                  {products.length}
+                </span>
+              )}
+              <span className="admin-nav-tooltip">
+                Products Catalog ({products.length})
+              </span>
             </button>
 
+            {/* 6. Categories */}
             <button
+              type="button"
               onClick={() => { setActiveTab('categories'); setSidebarOpen(false); }}
               className={`admin-nav-item ${activeTab === 'categories' ? 'active' : ''}`}
+              aria-label="Categories"
+              title="Categories"
             >
-              <Layers size={18} />
-              <span>Categories</span>
-              <span className="admin-nav-badge">{categories.length}</span>
+              <Layers size={20} />
+              {categories.length > 0 && (
+                <span className="admin-nav-icon-badge badge-neutral">
+                  {categories.length}
+                </span>
+              )}
+              <span className="admin-nav-tooltip">
+                Categories ({categories.length})
+              </span>
             </button>
 
-            <div className="admin-nav-section-title" style={{ marginTop: '16px' }}>Administration</div>
-
+            {/* 7. Settings */}
             <button
+              type="button"
               onClick={() => { setActiveTab('settings'); setSidebarOpen(false); }}
               className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+              aria-label="Settings"
+              title="Settings"
             >
-              <Settings size={18} />
-              <span>Settings</span>
+              <Settings size={20} />
               {whatsappStatus?.status === 'CONNECTED' && (
                 <span
-                  style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    background: '#10B981',
-                    marginLeft: 'auto',
-                    boxShadow: '0 0 6px #10B981'
-                  }}
+                  className="admin-nav-icon-dot-online"
                   title="WhatsApp Connected via Baileys"
                 />
               )}
+              <span className="admin-nav-tooltip">
+                Settings {whatsappStatus?.status === 'CONNECTED' ? '• WhatsApp Live' : ''}
+              </span>
             </button>
           </div>
 
-          {/* Sidebar Bottom Footer with User Profile and Aligned Logout */}
-          <div
-            className="admin-sidebar-footer"
-            style={{
-              paddingTop: '16px',
-              borderTop: '1px solid #E5E7EB',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-            }}
-          >
+          {/* Sidebar Bottom: User Profile Avatar & Aligned Logout */}
+          <div className="admin-sidebar-footer">
             <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '4px 6px',
-              }}
+              className="admin-sidebar-action-btn admin-user-avatar-btn"
+              aria-label={`Admin: ${adminUser.username} (Super Admin)`}
+              title={`${adminUser.username} • Super Admin`}
             >
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  background: '#EBF7EE',
-                  border: '1px solid #A7F3D0',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#15733E',
-                  flexShrink: 0,
-                }}
-              >
-                <ShieldCheck size={18} />
-              </div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div
-                  style={{
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    color: '#1B2E23',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {adminUser.username}
-                </div>
-                <div style={{ fontSize: '0.72rem', color: '#15733E', fontWeight: 600 }}>
-                  Super Admin
-                </div>
-              </div>
+              <ShieldCheck size={20} />
+              <span className="admin-nav-tooltip">
+                {adminUser.username} • Super Admin
+              </span>
             </div>
 
             <button
+              type="button"
               onClick={handleLogout}
-              className="btn btn-secondary admin-logout-btn"
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                padding: '10px 14px',
-                borderRadius: '10px',
-                color: '#DC2626',
-                borderColor: '#FEE2E2',
-                background: '#FEF2F2',
-                fontWeight: 700,
-                fontSize: '0.88rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#FEE2E2';
-                e.currentTarget.style.borderColor = '#FCA5A5';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = '#FEF2F2';
-                e.currentTarget.style.borderColor = '#FEE2E2';
-              }}
-              title="Log Out of Admin Platform"
+              className="admin-sidebar-action-btn admin-logout-rail-btn"
+              aria-label="Logout"
+              title="Logout"
             >
-              <LogOut size={16} />
-              <span>Logout</span>
+              <LogOut size={18} />
+              <span className="admin-nav-tooltip">
+                Logout
+              </span>
             </button>
-
-            <div style={{ textAlign: 'center', fontSize: '0.72rem', color: '#9CA3AF' }}>
-              SachiKheti Platform • LFPC Ltd.
-            </div>
           </div>
         </aside>
 
@@ -2674,75 +2735,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
                       </div>
                     </div>
                   </div>
-
-                  {/* Dotted Trend Graph */}
-                  <div className="admin-panel-card">
-                    <div className="admin-panel-card-header">
-                      <div>
-                        <h3 className="admin-panel-title">Order Activity Timeline</h3>
-                        <p className="admin-panel-sub">Volume & dispatch value per transaction</p>
-                      </div>
-                      <button onClick={() => setActiveTab('orders')} className="btn btn-secondary btn-sm">
-                        <span>Fulfillment</span>
-                      </button>
-                    </div>
-
-                    <div className="admin-dotted-chart-wrap">
-                      <svg width="100%" height="110" viewBox="0 0 340 110" preserveAspectRatio="none">
-                        <defs>
-                          <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#15733E" stopOpacity="0.25" />
-                            <stop offset="100%" stopColor="#15733E" stopOpacity="0.0" />
-                          </linearGradient>
-                        </defs>
-
-                        {/* Baseline Grid */}
-                        <line x1="10" y1="90" x2="330" y2="90" stroke="#E8ECE9" strokeWidth="1" strokeDasharray="3 3" />
-                        <line x1="10" y1="50" x2="330" y2="50" stroke="#E8ECE9" strokeWidth="1" strokeDasharray="3 3" />
-                        <line x1="10" y1="15" x2="330" y2="15" stroke="#E8ECE9" strokeWidth="1" strokeDasharray="3 3" />
-
-                        {(() => {
-                          const pts = timelinePoints.length > 0 ? timelinePoints : [
-                            { label: 'Start', amount: 490 },
-                            { label: 'Mid', amount: 1450 },
-                            { label: 'Latest', amount: 980 }
-                          ];
-                          const maxAmt = Math.max(...pts.map(p => p.amount), 500);
-                          const stepX = pts.length > 1 ? 300 / (pts.length - 1) : 150;
-
-                          const coords = pts.map((p, i) => {
-                            const x = 20 + i * stepX;
-                            const y = 85 - (p.amount / maxAmt) * 65;
-                            return { ...p, x, y };
-                          });
-
-                          const pathData = coords.reduce((acc, c, i) => {
-                            return i === 0 ? `M ${c.x} ${c.y}` : `${acc} L ${c.x} ${c.y}`;
-                          }, '');
-
-                          const areaData = coords.length > 0
-                            ? `${pathData} L ${coords[coords.length - 1].x} 90 L ${coords[0].x} 90 Z`
-                            : '';
-
-                          return (
-                            <>
-                              {areaData && <path d={areaData} fill="url(#chartGradient)" />}
-                              {pathData && <path d={pathData} fill="none" stroke="#15733E" strokeWidth="2.5" strokeLinecap="round" />}
-                              {coords.map((c, i) => (
-                                <g key={i}>
-                                  <circle cx={c.x} cy={c.y} r="5" fill="#FFFFFF" stroke="#15733E" strokeWidth="2.5" />
-                                  <circle cx={c.x} cy={c.y} r="2.5" fill="#15733E" />
-                                  <text x={c.x} y="104" textAnchor="middle" fontSize="9" fill="#7A8B80" fontWeight="600">
-                                    {c.label}
-                                  </text>
-                                </g>
-                              ))}
-                            </>
-                          );
-                        })()}
-                      </svg>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -2812,93 +2804,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
                     gap: '16px',
                   }}
                 >
-                  {/* Search, Listing Filter & Category Chips */}
-                  <div
-                    style={{
-                      background: '#FFFFFF',
-                      padding: '16px 20px',
-                      borderRadius: '14px',
-                      border: '1px solid #E5E7EB',
-                      marginBottom: '18px',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                    }}
-                  >
-                    {/* Search Input */}
-                    <div style={{ position: 'relative', marginBottom: '12px' }}>
-                      <Search
-                        size={17}
-                        style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#7A8B80' }}
-                      />
-                      <input
-                        type="text"
-                        value={billingSearch}
-                        onChange={(e) => setBillingSearch(e.target.value)}
-                        placeholder="Search product by title, Punjabi name, unit, machinery, category..."
-                        className="form-input"
-                        style={{ paddingLeft: '38px', margin: 0 }}
-                      />
-                    </div>
-
-                    {/* Listing Type Filter Pills (Direct Sale, Rent, Featured) */}
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => setBillingListingFilter('all')}
-                        className={`btn btn-sm ${billingListingFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-                        style={{ fontSize: '0.8rem', padding: '5px 12px' }}
-                      >
-                        All Items ({products.length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBillingListingFilter('sale')}
-                        className={`btn btn-sm ${billingListingFilter === 'sale' ? 'btn-primary' : 'btn-secondary'}`}
-                        style={{ fontSize: '0.8rem', padding: '5px 12px' }}
-                      >
-                        🌾 Direct Sale (Produce/Dairy)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBillingListingFilter('rent')}
-                        className={`btn btn-sm ${billingListingFilter === 'rent' ? 'btn-primary' : 'btn-secondary'}`}
-                        style={{ fontSize: '0.8rem', padding: '5px 12px' }}
-                      >
-                        🚜 Available for Rent (Machinery)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBillingListingFilter('featured')}
-                        className={`btn btn-sm ${billingListingFilter === 'featured' ? 'btn-primary' : 'btn-secondary'}`}
-                        style={{ fontSize: '0.8rem', padding: '5px 12px' }}
-                      >
-                        ⭐ Featured
-                      </button>
-                    </div>
-
-                    {/* Category Filter Pills */}
-                    <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-                      <button
-                        type="button"
-                        onClick={() => setBillingCategoryFilter('all')}
-                        className={`btn btn-sm ${billingCategoryFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-                        style={{ fontSize: '0.78rem', padding: '4px 12px', whiteSpace: 'nowrap' }}
-                      >
-                        All Categories
-                      </button>
-                      {categories.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => setBillingCategoryFilter(c.id)}
-                          className={`btn btn-sm ${billingCategoryFilter === c.id ? 'btn-primary' : 'btn-secondary'}`}
-                          style={{ fontSize: '0.78rem', padding: '4px 12px', whiteSpace: 'nowrap' }}
-                        >
-                          {c.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   {/* Product Cards Grid */}
                   <div
                     style={{
@@ -3595,43 +3500,125 @@ export default function AdminPortalPage({ onNavigateHome }) {
                 </button>
               </div>
 
-              {/* Search & Filter Toolbar */}
-              <div className="admin-filter-bar">
-                <div className="admin-search-box">
-                  <Search size={17} color="#7A8B80" className="admin-search-icon" />
-                  <input
-                    type="text"
-                    placeholder="Search products by title, category, or description..."
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    className="form-input admin-search-input"
-                  />
-                  {productSearch && (
-                    <button onClick={() => setProductSearch('')} className="admin-search-clear">×</button>
-                  )}
+              {/* Search, Filter & Quick Category Bar */}
+              <div
+                style={{
+                  background: '#FFFFFF',
+                  padding: '16px 20px',
+                  borderRadius: '14px',
+                  border: '1px solid #E5E7EB',
+                  marginBottom: '22px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px',
+                }}
+              >
+                {/* Top Row: Search Input + Category Dropdown */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {/* Search Input */}
+                  <div style={{ flex: '1 1 320px', position: 'relative' }}>
+                    <Search
+                      size={17}
+                      color="#7A8B80"
+                      style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Search products by title, Punjabi name, category, or description..."
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      className="form-input"
+                      style={{
+                        paddingLeft: '40px',
+                        paddingRight: productSearch ? '36px' : '14px',
+                        margin: 0,
+                        height: '42px',
+                        borderRadius: '8px',
+                        fontSize: '0.88rem',
+                        border: '1px solid #D1D5DB',
+                        background: '#FFFFFF',
+                        width: '100%',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                    {productSearch && (
+                      <button
+                        onClick={() => setProductSearch('')}
+                        style={{
+                          position: 'absolute',
+                          right: '12px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          fontSize: '1.2rem',
+                          color: '#9CA3AF',
+                          cursor: 'pointer',
+                          padding: '2px',
+                          lineHeight: 1,
+                        }}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Category Select with integrated icon */}
+                  <div style={{ minWidth: '220px', position: 'relative' }}>
+                    <Filter
+                      size={15}
+                      color="#15733E"
+                      style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                    />
+                    <select
+                      value={selectedProductCategory}
+                      onChange={(e) => setSelectedProductCategory(e.target.value)}
+                      className="form-select"
+                      style={{
+                        margin: 0,
+                        paddingLeft: '34px',
+                        paddingRight: '30px',
+                        height: '42px',
+                        borderRadius: '8px',
+                        fontSize: '0.86rem',
+                        fontWeight: 600,
+                        border: '1px solid #D1D5DB',
+                        background: '#FFFFFF',
+                        cursor: 'pointer',
+                        width: '100%',
+                        boxSizing: 'border-box',
+                      }}
+                    >
+                      <option value="all">All Categories ({products.length})</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                <div className="admin-filter-select-wrap">
-                  <Filter size={15} color="#7A8B80" />
-                  <select
-                    value={selectedProductCategory}
-                    onChange={(e) => setSelectedProductCategory(e.target.value)}
-                    className="form-select admin-filter-select"
-                  >
-                    <option value="all">All Categories ({products.length})</option>
-                    {categories.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Quick Status & Rental Filter Pills */}
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+                {/* Bottom Row: Quick Status & Rental Filter Pills */}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', paddingTop: '6px', borderTop: '1px solid #F3F4F6' }}>
+                  <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.4px', marginRight: '4px' }}>
+                    Filter:
+                  </span>
                   <button
                     type="button"
                     onClick={() => setProductListingFilter('all')}
                     className={`btn btn-sm ${productListingFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '0.78rem', padding: '5px 12px' }}
+                    style={{
+                      fontSize: '0.8rem',
+                      padding: '6px 14px',
+                      borderRadius: '20px',
+                      fontWeight: 700,
+                      background: productListingFilter === 'all' ? '#0A3E22' : '#F9FAFB',
+                      color: productListingFilter === 'all' ? '#FFFFFF' : '#374151',
+                      borderColor: productListingFilter === 'all' ? '#0A3E22' : '#E5E7EB',
+                      cursor: 'pointer',
+                    }}
                   >
                     All Products ({products.length})
                   </button>
@@ -3639,7 +3626,16 @@ export default function AdminPortalPage({ onNavigateHome }) {
                     type="button"
                     onClick={() => setProductListingFilter('featured')}
                     className={`btn btn-sm ${productListingFilter === 'featured' ? 'btn-gold' : 'btn-secondary'}`}
-                    style={{ fontSize: '0.78rem', padding: '5px 12px' }}
+                    style={{
+                      fontSize: '0.8rem',
+                      padding: '6px 14px',
+                      borderRadius: '20px',
+                      fontWeight: 700,
+                      background: productListingFilter === 'featured' ? '#F59E0B' : '#F9FAFB',
+                      color: productListingFilter === 'featured' ? '#FFFFFF' : '#374151',
+                      borderColor: productListingFilter === 'featured' ? '#F59E0B' : '#E5E7EB',
+                      cursor: 'pointer',
+                    }}
                   >
                     ★ Featured ({products.filter((p) => p.featured).length})
                   </button>
@@ -3648,11 +3644,14 @@ export default function AdminPortalPage({ onNavigateHome }) {
                     onClick={() => setProductListingFilter('rent')}
                     className={`btn btn-sm ${productListingFilter === 'rent' ? 'btn-primary' : 'btn-secondary'}`}
                     style={{
-                      fontSize: '0.78rem',
-                      padding: '5px 12px',
-                      background: productListingFilter === 'rent' ? '#7E22CE' : undefined,
-                      color: productListingFilter === 'rent' ? '#fff' : undefined,
-                      borderColor: productListingFilter === 'rent' ? '#7E22CE' : undefined,
+                      fontSize: '0.8rem',
+                      padding: '6px 14px',
+                      borderRadius: '20px',
+                      fontWeight: 700,
+                      background: productListingFilter === 'rent' ? '#7E22CE' : '#F9FAFB',
+                      color: productListingFilter === 'rent' ? '#FFFFFF' : '#374151',
+                      borderColor: productListingFilter === 'rent' ? '#7E22CE' : '#E5E7EB',
+                      cursor: 'pointer',
                     }}
                   >
                     🚜 Available for Rent ({products.filter((p) => getProductListingType(p) === 'rent' || getProductListingType(p) === 'both').length})
@@ -3661,7 +3660,16 @@ export default function AdminPortalPage({ onNavigateHome }) {
                     type="button"
                     onClick={() => setProductListingFilter('sale')}
                     className={`btn btn-sm ${productListingFilter === 'sale' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ fontSize: '0.78rem', padding: '5px 12px' }}
+                    style={{
+                      fontSize: '0.8rem',
+                      padding: '6px 14px',
+                      borderRadius: '20px',
+                      fontWeight: 700,
+                      background: productListingFilter === 'sale' ? '#15733E' : '#F9FAFB',
+                      color: productListingFilter === 'sale' ? '#FFFFFF' : '#374151',
+                      borderColor: productListingFilter === 'sale' ? '#15733E' : '#E5E7EB',
+                      cursor: 'pointer',
+                    }}
                   >
                     🌾 Direct Sale ({products.filter((p) => getProductListingType(p) === 'sale' || getProductListingType(p) === 'both').length})
                   </button>
@@ -3711,12 +3719,14 @@ export default function AdminPortalPage({ onNavigateHome }) {
                         </td>
                         <td>
                           <button
-                            onClick={() => handleToggleStock(p)}
-                            className={`badge ${p.inStock ? 'badge-green' : 'badge-gold'}`}
-                            style={{ cursor: 'pointer', border: 'none' }}
-                            title="Click to toggle in-stock / out-of-stock"
+                            type="button"
+                            onClick={() => openStockModal(p)}
+                            className={`badge ${p.inStock && p.stockCount > 0 ? 'badge-green' : 'badge-gold'}`}
+                            style={{ cursor: 'pointer', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                            title="Click to adjust stock quantity & in/out-of-stock status"
                           >
-                            {p.inStock ? `In Stock (${p.stockCount})` : 'Out of Stock'}
+                            <Package size={12} />
+                            <span>{p.inStock && p.stockCount > 0 ? `In Stock (${p.stockCount})` : 'Out of Stock (0)'}</span>
                           </button>
                         </td>
                         <td>
@@ -3781,7 +3791,25 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           })()}
                         </td>
                         <td style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: '8px' }}>
+                          <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => openStockModal(p)}
+                              className={`btn btn-sm ${p.inStock && p.stockCount > 0 ? 'btn-secondary' : 'btn-gold'}`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                fontWeight: 700,
+                                fontSize: '0.78rem',
+                                padding: '5px 10px',
+                                borderRadius: '6px',
+                              }}
+                              title="Adjust Stock Quantity & In/Out-of-Stock Status"
+                            >
+                              <Package size={14} color={p.inStock && p.stockCount > 0 ? '#15733E' : '#B45309'} />
+                              <span>Stock ({p.stockCount ?? (p.inStock ? 50 : 0)})</span>
+                            </button>
                             <button
                               onClick={() => openEditProductModal(p)}
                               className="btn btn-secondary btn-sm"
@@ -4055,318 +4083,703 @@ export default function AdminPortalPage({ onNavigateHome }) {
           )}
 
           {/* ==================================================== */}
-          {/* TAB: PAST ORDERS & BILLS HISTORY LEDGER              */}
+          {/* TAB: PAST ORDERS & BILLS HISTORY LEDGER (EXCEL THEME) */}
           {/* ==================================================== */}
           {activeTab === 'history' && (
-            <div className="admin-tab-view">
-              <div className="admin-view-header">
-                <div>
-                  <h1 className="admin-view-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <History size={28} color="#15733E" />
-                    <span>Past Orders & Bills History</span>
-                  </h1>
-                  <p className="admin-view-sub">
-                    Complete financial ledger and audit log of all POS counter bills, cash memos, online store orders, and WhatsApp checkouts.
-                  </p>
-                </div>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={exportHistoryToCSV}
-                    className="btn btn-secondary"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                    title="Export filtered records as CSV spreadsheet"
-                  >
-                    <Download size={16} />
-                    <span>Export CSV</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('customer-store')}
-                    className="btn btn-primary"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <Plus size={16} />
-                    <span>+ New POS Bill</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* 4 KPI Summary Metric Cards */}
-              <div className="admin-kpi-grid" style={{ marginBottom: '22px' }}>
-                <div className="admin-kpi-card">
-                  <div className="admin-kpi-icon-wrap" style={{ background: '#EBF7EE', color: '#15733E' }}>
-                    <Receipt size={22} />
-                  </div>
-                  <div>
-                    <div className="admin-kpi-label">Total Bills & Orders</div>
-                    <div className="admin-kpi-value">{orders.length}</div>
-                    <div className="admin-kpi-trend" style={{ color: '#15733E' }}>
-                      ₹{historyTotalRevenue.toLocaleString('en-IN')} Lifetime Gross
-                    </div>
-                  </div>
-                </div>
-
-                <div className="admin-kpi-card">
-                  <div className="admin-kpi-icon-wrap" style={{ background: '#F0FDF4', color: '#16A34A' }}>
-                    <CheckCircle size={22} />
-                  </div>
-                  <div>
-                    <div className="admin-kpi-label">Paid / Settled Revenue</div>
-                    <div className="admin-kpi-value" style={{ color: '#16A34A' }}>
-                      ₹{historyPaidRevenue.toLocaleString('en-IN')}
-                    </div>
-                    <div className="admin-kpi-trend" style={{ color: '#6B7280' }}>
-                      {orders.filter((o) => (o.paymentStatus || '').toUpperCase() === 'PAID').length} Records Settled
-                    </div>
-                  </div>
-                </div>
-
-                <div className="admin-kpi-card">
-                  <div className="admin-kpi-icon-wrap" style={{ background: '#FEF3C7', color: '#D97706' }}>
-                    <Clock size={22} />
-                  </div>
-                  <div>
-                    <div className="admin-kpi-label">Payment Due / Khata</div>
-                    <div className="admin-kpi-value" style={{ color: '#D97706' }}>
-                      ₹{historyPendingRevenue.toLocaleString('en-IN')}
-                    </div>
-                    <div className="admin-kpi-trend" style={{ color: '#D97706' }}>
-                      {orders.filter((o) => (o.paymentStatus || '').toUpperCase() === 'PENDING').length} Unpaid / Credit
-                    </div>
-                  </div>
-                </div>
-
-                <div className="admin-kpi-card">
-                  <div className="admin-kpi-icon-wrap" style={{ background: '#EFF6FF', color: '#2563EB' }}>
-                    <Store size={22} />
-                  </div>
-                  <div>
-                    <div className="admin-kpi-label">POS vs Online Split</div>
-                    <div className="admin-kpi-value" style={{ fontSize: '1.25rem' }}>
-                      {historyPosBillsCount} POS • {historyStoreOrdersCount} Store
-                    </div>
-                    <div className="admin-kpi-trend" style={{ color: '#6B7280' }}>
-                      Omnichannel Sales Ledger
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Comprehensive Search & Multi-Filter Bar */}
+            <div className="admin-tab-view" style={{ padding: 0, maxWidth: '100%' }}>
+              {/* Excel Workbook Shell Window Container */}
               <div
                 style={{
                   background: '#FFFFFF',
-                  padding: '16px 20px',
-                  borderRadius: '14px',
-                  border: '1px solid #E5E7EB',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                  marginBottom: '20px',
+                  borderRadius: '12px',
+                  border: '1px solid #D2D0CE',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+                  overflow: 'hidden',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '12px',
                 }}
               >
-                {/* Search Row */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <div style={{ flex: 1, minWidth: '240px', position: 'relative' }}>
-                    <Search
-                      size={17}
-                      style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#7A8B80' }}
-                    />
-                    <input
-                      type="text"
-                      value={historySearch}
-                      onChange={(e) => setHistorySearch(e.target.value)}
-                      placeholder="Search by Bill #, Customer Name, Phone, City, or Product Item..."
-                      className="form-input"
-                      style={{ paddingLeft: '38px', margin: 0 }}
-                    />
-                    {historySearch && (
-                      <button
-                        onClick={() => setHistorySearch('')}
-                        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF' }}
-                      >
-                        ×
-                      </button>
-                    )}
+                {/* 1. EXCEL WORKBOOK TITLE BAR (Branded in SachiKheti Green #15733E) */}
+                <div
+                  style={{
+                    background: '#15733E',
+                    color: '#FFFFFF',
+                    padding: '8px 16px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                    borderBottom: '2px solid #0D522C',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div
+                      style={{
+                        background: '#0D522C',
+                        color: '#FFFFFF',
+                        width: '30px',
+                        height: '30px',
+                        borderRadius: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 900,
+                        fontSize: '1rem',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                        border: '1px solid #22C55E',
+                      }}
+                      title="SachiKheti Excel Financial Workbook"
+                    >
+                      X
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.96rem', letterSpacing: '0.2px' }}>
+                          SachiKheti_Sales_Ledger_2026.xlsx
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '0.68rem',
+                            padding: '1px 6px',
+                            borderRadius: '10px',
+                            background: '#0D522C',
+                            color: '#BBF7D0',
+                            fontWeight: 700,
+                          }}
+                        >
+                          ● Cloud AutoSave [ON]
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#DCFCE7' }}>
+                        Financial Audit Ledger • Direct Farm Produce & Machinery Rental Hiring Accounts
+                      </div>
+                    </div>
                   </div>
 
-                  {/* View Mode Toggle (Table Ledger vs Cards) */}
-                  <div style={{ display: 'flex', background: '#F3F4F6', padding: '3px', borderRadius: '8px' }}>
+                  {/* Quick Excel Action Buttons in Title Bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <button
                       type="button"
-                      onClick={() => setHistoryViewMode('table')}
+                      onClick={exportHistoryToCSV}
                       style={{
-                        padding: '6px 12px',
+                        background: '#0D522C',
+                        color: '#FFFFFF',
+                        border: '1px solid #22C55E',
                         borderRadius: '6px',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontSize: '0.8rem',
+                        padding: '6px 12px',
+                        fontSize: '0.78rem',
                         fontWeight: 700,
-                        background: historyViewMode === 'table' ? '#FFFFFF' : 'transparent',
-                        color: historyViewMode === 'table' ? '#111827' : '#6B7280',
-                        boxShadow: historyViewMode === 'table' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        transition: 'background 0.15s ease',
                       }}
+                      title="Export full ledger as CSV / XLSX file"
                     >
-                      Table Ledger
+                      <Download size={14} />
+                      <span>Export .XLSX / CSV</span>
                     </button>
+
                     <button
                       type="button"
-                      onClick={() => setHistoryViewMode('cards')}
+                      onClick={() => setActiveTab('customer-store')}
                       style={{
-                        padding: '6px 12px',
-                        borderRadius: '6px',
+                        background: '#FFFFFF',
+                        color: '#15733E',
                         border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px 12px',
+                        fontSize: '0.78rem',
+                        fontWeight: 800,
                         cursor: 'pointer',
-                        fontSize: '0.8rem',
-                        fontWeight: 700,
-                        background: historyViewMode === 'cards' ? '#FFFFFF' : 'transparent',
-                        color: historyViewMode === 'cards' ? '#111827' : '#6B7280',
-                        boxShadow: historyViewMode === 'cards' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
                       }}
                     >
-                      Receipt Cards
+                      <Plus size={14} />
+                      <span>+ Insert POS Bill</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={loadAllData}
+                      style={{
+                        background: '#0D522C',
+                        color: '#FFFFFF',
+                        border: '1px solid #22C55E',
+                        borderRadius: '6px',
+                        padding: '6px 10px',
+                        fontSize: '0.78rem',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                      }}
+                      title="Sync / Refresh Data"
+                    >
+                      <RefreshCw size={14} />
                     </button>
                   </div>
                 </div>
 
-                {/* Filter Controls Row */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', alignItems: 'center' }}>
-                  {/* Type Filter */}
-                  <div>
-                    <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: '2px' }}>
-                      Record Type
-                    </label>
-                    <select
-                      value={historyTypeFilter}
-                      onChange={(e) => setHistoryTypeFilter(e.target.value)}
-                      className="form-select"
-                      style={{ margin: 0, padding: '6px 8px', fontSize: '0.82rem' }}
-                    >
-                      <option value="all">All Types ({orders.length})</option>
-                      <option value="pos">POS Counter Bills ({historyPosBillsCount})</option>
-                      <option value="store">Web Store Orders ({historyStoreOrdersCount})</option>
-                      <option value="whatsapp">WhatsApp Assisted Orders</option>
-                    </select>
-                  </div>
-
-                  {/* Payment Status Filter */}
-                  <div>
-                    <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: '2px' }}>
-                      Payment Status
-                    </label>
-                    <select
-                      value={historyPaymentStatusFilter}
-                      onChange={(e) => setHistoryPaymentStatusFilter(e.target.value)}
-                      className="form-select"
-                      style={{ margin: 0, padding: '6px 8px', fontSize: '0.82rem' }}
-                    >
-                      <option value="all">All Payment Statuses</option>
-                      <option value="PAID">PAID / Settled</option>
-                      <option value="PENDING">PENDING / Due / Khata</option>
-                    </select>
-                  </div>
-
-                  {/* Payment Method Filter */}
-                  <div>
-                    <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: '2px' }}>
-                      Payment Method
-                    </label>
-                    <select
-                      value={historyPaymentMethodFilter}
-                      onChange={(e) => setHistoryPaymentMethodFilter(e.target.value)}
-                      className="form-select"
-                      style={{ margin: 0, padding: '6px 8px', fontSize: '0.82rem' }}
-                    >
-                      <option value="all">All Payment Methods</option>
-                      <option value="CASH">Cash / COD</option>
-                      <option value="UPI">UPI / QR Code</option>
-                      <option value="BANK_TRANSFER">Bank Transfer / NEFT</option>
-                      <option value="RAZORPAY">Razorpay / Card</option>
-                      <option value="CREDIT">Khata / Credit</option>
-                      <option value="WHATSAPP">WhatsApp Order</option>
-                    </select>
-                  </div>
-
-                  {/* Date Preset */}
-                  <div>
-                    <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: '2px' }}>
-                      Date Period
-                    </label>
-                    <select
-                      value={historyDatePreset}
-                      onChange={(e) => setHistoryDatePreset(e.target.value)}
-                      className="form-select"
-                      style={{ margin: 0, padding: '6px 8px', fontSize: '0.82rem' }}
-                    >
-                      <option value="all">All Time</option>
-                      <option value="today">Today</option>
-                      <option value="yesterday">Yesterday</option>
-                      <option value="7days">Last 7 Days</option>
-                      <option value="30days">Last 30 Days</option>
-                    </select>
-                  </div>
-
-                  {/* Sort By */}
-                  <div>
-                    <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: '2px' }}>
-                      Sort Order
-                    </label>
-                    <select
-                      value={historySort}
-                      onChange={(e) => setHistorySort(e.target.value)}
-                      className="form-select"
-                      style={{ margin: 0, padding: '6px 8px', fontSize: '0.82rem' }}
-                    >
-                      <option value="newest">Newest First</option>
-                      <option value="oldest">Oldest First</option>
-                      <option value="highest">Highest Amount (₹)</option>
-                      <option value="lowest">Lowest Amount (₹)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Showing filtered count */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <span style={{ fontSize: '0.82rem', color: '#6B7280', fontWeight: 600 }}>
-                  Showing <strong style={{ color: '#111827' }}>{filteredHistory.length}</strong> of {orders.length} past records
-                </span>
-                {(historySearch || historyTypeFilter !== 'all' || historyPaymentStatusFilter !== 'all' || historyPaymentMethodFilter !== 'all' || historyDatePreset !== 'all') && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setHistorySearch('');
-                      setHistoryTypeFilter('all');
-                      setHistoryPaymentStatusFilter('all');
-                      setHistoryPaymentMethodFilter('all');
-                      setHistoryDatePreset('all');
+                {/* 2. EXCEL RIBBON TOOLBAR & KPI SUMMARY BAR */}
+                <div
+                  style={{
+                    background: '#F9FAFB',
+                    borderBottom: '1px solid #E5E7EB',
+                    padding: '10px 16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                  }}
+                >
+                  {/* KPI Mini-Summary Cells (Styled like Excel KPI Formula Tiles) */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+                      gap: '8px',
                     }}
-                    style={{ background: 'none', border: 'none', color: '#EF4444', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 700 }}
                   >
-                    Reset All Filters
-                  </button>
-                )}
-              </div>
+                    {/* Card 1: Gross Sales */}
+                    <div
+                      style={{
+                        background: '#FFFFFF',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '6px',
+                        padding: '8px 12px',
+                        borderLeft: '4px solid #15733E',
+                      }}
+                    >
+                      <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase' }}>
+                        =SUM(GROSS_SALES)
+                      </div>
+                      <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#15733E', fontFamily: 'monospace' }}>
+                        ₹{historyTotalRevenue.toLocaleString('en-IN')}
+                      </div>
+                      <div style={{ fontSize: '0.68rem', color: '#4B5563' }}>
+                        {orders.length} Total Registered Bills
+                      </div>
+                    </div>
 
-              {/* TABLE VIEW */}
-              {historyViewMode === 'table' && (
-                <div className="admin-table-container">
-                  <table className="admin-table">
-                    <thead>
-                      <tr>
-                        <th style={{ minWidth: '130px' }}>Bill / Order #</th>
-                        <th style={{ minWidth: '120px' }}>Date & Time</th>
-                        <th style={{ minWidth: '150px' }}>Customer</th>
-                        <th style={{ minWidth: '200px' }}>Items Purchased</th>
-                        <th style={{ minWidth: '110px' }}>Amount</th>
-                        <th style={{ minWidth: '140px' }}>Payment</th>
-                        <th style={{ minWidth: '130px' }}>Status</th>
-                        <th style={{ textAlign: 'right', minWidth: '160px' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                    {/* Card 2: Settled Paid */}
+                    <div
+                      style={{
+                        background: '#FFFFFF',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '6px',
+                        padding: '8px 12px',
+                        borderLeft: '4px solid #16A34A',
+                      }}
+                    >
+                      <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase' }}>
+                        =SUMIF(STATUS, "PAID")
+                      </div>
+                      <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#16A34A', fontFamily: 'monospace' }}>
+                        ₹{historyPaidRevenue.toLocaleString('en-IN')}
+                      </div>
+                      <div style={{ fontSize: '0.68rem', color: '#16A34A' }}>
+                        ✓ {orders.filter((o) => (o.paymentStatus || '').toUpperCase() === 'PAID').length} Settled Records
+                      </div>
+                    </div>
+
+                    {/* Card 3: Pending Due Khata */}
+                    <div
+                      style={{
+                        background: '#FFFFFF',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '6px',
+                        padding: '8px 12px',
+                        borderLeft: '4px solid #D97706',
+                      }}
+                    >
+                      <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase' }}>
+                        =SUMIF(STATUS, "PENDING")
+                      </div>
+                      <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#D97706', fontFamily: 'monospace' }}>
+                        ₹{historyPendingRevenue.toLocaleString('en-IN')}
+                      </div>
+                      <div style={{ fontSize: '0.68rem', color: '#D97706' }}>
+                        ⏳ {historyDueCount} Khata / Unpaid
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* 3. EXCEL FORMULA BAR (fx) */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      background: '#FFFFFF',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '6px',
+                      fontSize: '0.78rem',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {/* Name Box */}
+                    <div
+                      style={{
+                        padding: '6px 12px',
+                        background: '#F3F4F6',
+                        borderRight: '1px solid #D1D5DB',
+                        fontWeight: 800,
+                        color: '#374151',
+                        fontFamily: 'monospace',
+                        minWidth: '95px',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {selectedHistoryRowId
+                        ? `ROW_${orders.findIndex((o) => o.id === selectedHistoryRowId) + 1}`
+                        : `A1:I${filteredHistory.length}`}
+                    </div>
+
+                    {/* fx symbol */}
+                    <div
+                      style={{
+                        padding: '6px 10px',
+                        borderRight: '1px solid #D1D5DB',
+                        fontWeight: 900,
+                        fontStyle: 'italic',
+                        color: '#15733E',
+                        fontFamily: 'serif',
+                      }}
+                    >
+                      fx
+                    </div>
+
+                    {/* Formula Content */}
+                    <div
+                      style={{
+                        flex: 1,
+                        padding: '6px 12px',
+                        color: '#1F2937',
+                        fontFamily: 'monospace',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {selectedOrderRecord ? (
+                        <span>
+                          <strong>SELECTED_ROW:</strong> #{selectedOrderRecord.orderNumber} | <strong>FARMER:</strong> {selectedOrderRecord.customerName} ({selectedOrderRecord.customerPhone}) | <strong>GROSS:</strong> ₹{selectedOrderRecord.totalAmount?.toLocaleString('en-IN')} | <strong>PAYMENT:</strong> {selectedOrderRecord.paymentMethod} ({selectedOrderRecord.paymentStatus})
+                        </span>
+                      ) : (
+                        <span>
+                          =SUM(F2:F{filteredHistory.length + 1}) ➔ <strong>₹{filteredHistory.reduce((s, o) => s + (o.totalAmount || 0), 0).toLocaleString('en-IN')}</strong> | =COUNT({filteredHistory.length} bills) | =SETTLED(₹{filteredHistory.filter((o) => (o.paymentStatus || '').toUpperCase() === 'PAID').reduce((s, o) => s + (o.totalAmount || 0), 0).toLocaleString('en-IN')}) | =DUE(₹{filteredHistory.filter((o) => (o.paymentStatus || '').toUpperCase() === 'PENDING').reduce((s, o) => s + (o.totalAmount || 0), 0).toLocaleString('en-IN')})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. EXCEL WORKSHEET TABLE GRID */}
+                {historyViewMode === 'table' ? (
+                  <div style={{ overflowX: 'auto', background: '#FFFFFF', maxHeight: '72vh' }}>
+                    <table
+                      style={{
+                        width: '100%',
+                        borderCollapse: 'collapse',
+                        fontSize: '0.8rem',
+                        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif',
+                      }}
+                    >
+                      <thead>
+                        {/* Row 1: Excel Column Header Letters (A, B, C...) */}
+                        <tr style={{ background: '#F3F2F1', borderBottom: '1px solid #D2D0CE' }}>
+                          <th style={{ width: '45px', textAlign: 'center', color: '#605E5C', fontWeight: 800, fontSize: '0.72rem', borderRight: '1px solid #D2D0CE', padding: '4px' }}>
+                            ◢
+                          </th>
+                          <th style={{ padding: '4px 8px', textAlign: 'left', color: '#605E5C', fontWeight: 700, fontSize: '0.72rem', borderRight: '1px solid #D2D0CE', width: '135px' }}>
+                            A
+                          </th>
+                          <th style={{ padding: '4px 8px', textAlign: 'left', color: '#605E5C', fontWeight: 700, fontSize: '0.72rem', borderRight: '1px solid #D2D0CE', width: '120px' }}>
+                            B
+                          </th>
+                          <th style={{ padding: '4px 8px', textAlign: 'left', color: '#605E5C', fontWeight: 700, fontSize: '0.72rem', borderRight: '1px solid #D2D0CE', width: '160px' }}>
+                            C
+                          </th>
+                          <th style={{ padding: '4px 8px', textAlign: 'left', color: '#605E5C', fontWeight: 700, fontSize: '0.72rem', borderRight: '1px solid #D2D0CE', width: '110px' }}>
+                            D
+                          </th>
+                          <th style={{ padding: '4px 8px', textAlign: 'left', color: '#605E5C', fontWeight: 700, fontSize: '0.72rem', borderRight: '1px solid #D2D0CE', minWidth: '220px' }}>
+                            E
+                          </th>
+                          <th style={{ padding: '4px 8px', textAlign: 'right', color: '#605E5C', fontWeight: 700, fontSize: '0.72rem', borderRight: '1px solid #D2D0CE', width: '110px' }}>
+                            F
+                          </th>
+                          <th style={{ padding: '4px 8px', textAlign: 'center', color: '#605E5C', fontWeight: 700, fontSize: '0.72rem', borderRight: '1px solid #D2D0CE', width: '120px' }}>
+                            G
+                          </th>
+                          <th style={{ padding: '4px 8px', textAlign: 'center', color: '#605E5C', fontWeight: 700, fontSize: '0.72rem', borderRight: '1px solid #D2D0CE', width: '120px' }}>
+                            H
+                          </th>
+                          <th style={{ padding: '4px 8px', textAlign: 'center', color: '#605E5C', fontWeight: 700, fontSize: '0.72rem', width: '160px' }}>
+                            I
+                          </th>
+                        </tr>
+
+                        {/* Row 2: Human-readable Field Names with Excel Sort / Filter Buttons */}
+                        <tr style={{ background: '#FAF9F8', borderBottom: '2px solid #15733E' }}>
+                          <th style={{ textAlign: 'center', padding: '7px 4px', color: '#605E5C', borderRight: '1px solid #D2D0CE', fontSize: '0.72rem', fontWeight: 700 }}>
+                            #
+                          </th>
+                          <th style={{ padding: '7px 10px', textAlign: 'left', color: '#201F1E', fontWeight: 800, borderRight: '1px solid #D2D0CE' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span>Bill / Order #</span>
+                              <span style={{ fontSize: '0.65rem', color: '#15733E' }}>▼</span>
+                            </div>
+                          </th>
+                          <th style={{ padding: '7px 10px', textAlign: 'left', color: '#201F1E', fontWeight: 800, borderRight: '1px solid #D2D0CE' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span>Date & Time</span>
+                              <span style={{ fontSize: '0.65rem', color: '#15733E' }}>▼</span>
+                            </div>
+                          </th>
+                          <th style={{ padding: '7px 10px', textAlign: 'left', color: '#201F1E', fontWeight: 800, borderRight: '1px solid #D2D0CE' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span>Customer & Phone</span>
+                              <span style={{ fontSize: '0.65rem', color: '#15733E' }}>▼</span>
+                            </div>
+                          </th>
+                          <th style={{ padding: '7px 10px', textAlign: 'left', color: '#201F1E', fontWeight: 800, borderRight: '1px solid #D2D0CE' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span>Channel</span>
+                              <span style={{ fontSize: '0.65rem', color: '#15733E' }}>▼</span>
+                            </div>
+                          </th>
+                          <th style={{ padding: '7px 10px', textAlign: 'left', color: '#201F1E', fontWeight: 800, borderRight: '1px solid #D2D0CE' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span>Items & Tenure</span>
+                              <span style={{ fontSize: '0.65rem', color: '#15733E' }}>▼</span>
+                            </div>
+                          </th>
+                          <th style={{ padding: '7px 10px', textAlign: 'right', color: '#201F1E', fontWeight: 800, borderRight: '1px solid #D2D0CE' }}>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px' }}>
+                              <span>Total Amount (₹)</span>
+                              <span style={{ fontSize: '0.65rem', color: '#15733E' }}>▼</span>
+                            </div>
+                          </th>
+                          <th style={{ padding: '7px 10px', textAlign: 'center', color: '#201F1E', fontWeight: 800, borderRight: '1px solid #D2D0CE' }}>
+                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '4px' }}>
+                              <span>Payment</span>
+                              <span style={{ fontSize: '0.65rem', color: '#15733E' }}>▼</span>
+                            </div>
+                          </th>
+                          <th style={{ padding: '7px 10px', textAlign: 'center', color: '#201F1E', fontWeight: 800, borderRight: '1px solid #D2D0CE' }}>
+                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '4px' }}>
+                              <span>Fulfillment</span>
+                              <span style={{ fontSize: '0.65rem', color: '#15733E' }}>▼</span>
+                            </div>
+                          </th>
+                          <th style={{ padding: '7px 10px', textAlign: 'center', color: '#201F1E', fontWeight: 800 }}>
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredHistory.map((o, idx) => {
+                          const isPos = (o.orderNumber || '').startsWith('SK-BILL') || (o.notes || '').includes('[Custom POS Bill]');
+                          const notesStr = (o.notes || '').toLowerCase();
+                          const isRental = notesStr.includes('rental') || notesStr.includes('tenure') || notesStr.includes('penalty');
+                          let parsedItems = [];
+                          try {
+                            parsedItems = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
+                          } catch (e) {}
+
+                          const isSelected = selectedHistoryRowId === o.id;
+
+                          return (
+                            <tr
+                              key={o.id}
+                              onClick={() => setSelectedHistoryRowId(isSelected ? null : o.id)}
+                              style={{
+                                background: isSelected ? '#F0FDF4' : idx % 2 === 0 ? '#FFFFFF' : '#FAF9F8',
+                                borderBottom: '1px solid #E1DFDD',
+                                cursor: 'pointer',
+                                transition: 'background 0.1s ease',
+                                outline: isSelected ? '2px solid #15733E' : 'none',
+                              }}
+                            >
+                              {/* Row Number Header Cell */}
+                              <td
+                                style={{
+                                  textAlign: 'center',
+                                  padding: '8px 4px',
+                                  background: isSelected ? '#DCFCE7' : '#F3F2F1',
+                                  color: isSelected ? '#15733E' : '#605E5C',
+                                  fontWeight: 800,
+                                  fontSize: '0.74rem',
+                                  borderRight: '1px solid #D2D0CE',
+                                  fontFamily: 'monospace',
+                                  userSelect: 'none',
+                                }}
+                              >
+                                {idx + 1}
+                              </td>
+
+                              {/* Col A: Bill / Order # */}
+                              <td style={{ padding: '8px 10px', borderRight: '1px solid #E1DFDD' }}>
+                                <div style={{ fontWeight: 800, color: '#111827', fontFamily: 'monospace', fontSize: '0.84rem' }}>
+                                  {o.orderNumber}
+                                </div>
+                                <span
+                                  style={{
+                                    fontSize: '0.66rem',
+                                    padding: '1px 5px',
+                                    borderRadius: '4px',
+                                    display: 'inline-block',
+                                    marginTop: '2px',
+                                    fontWeight: 700,
+                                    background: isRental ? '#DCFCE7' : isPos ? '#DBEAFE' : '#FEF3C7',
+                                    color: isRental ? '#166534' : isPos ? '#1E40AF' : '#92400E',
+                                  }}
+                                >
+                                  {isRental ? '🚜 Rental Hiring' : isPos ? '🛒 POS Bill' : '🌐 Web Order'}
+                                </span>
+                              </td>
+
+                              {/* Col B: Date & Time */}
+                              <td style={{ padding: '8px 10px', borderRight: '1px solid #E1DFDD' }}>
+                                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151' }}>
+                                  {new Date(o.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                </div>
+                                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>
+                                  {new Date(o.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                              </td>
+
+                              {/* Col C: Customer & Phone */}
+                              <td style={{ padding: '8px 10px', borderRight: '1px solid #E1DFDD' }}>
+                                <div style={{ fontWeight: 700, color: '#111827', fontSize: '0.82rem' }}>
+                                  {o.customerName}
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: '#15733E', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <Phone size={10} />
+                                  <a href={`tel:${o.customerPhone}`} style={{ color: '#15733E', textDecoration: 'none' }}>
+                                    {o.customerPhone}
+                                  </a>
+                                </div>
+                                {o.city && (
+                                  <div style={{ fontSize: '0.7rem', color: '#6B7280' }}>
+                                    📍 {o.city}
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Col D: Channel */}
+                              <td style={{ padding: '8px 10px', borderRight: '1px solid #E1DFDD', fontSize: '0.76rem' }}>
+                                <span style={{ fontWeight: 600, color: '#4B5563' }}>
+                                  {isPos ? 'Store POS' : (o.paymentMethod === 'WHATSAPP' ? 'WhatsApp' : 'Online Store')}
+                                </span>
+                              </td>
+
+                              {/* Col E: Items Purchased & Rental Tenure */}
+                              <td style={{ padding: '8px 10px', borderRight: '1px solid #E1DFDD' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '260px' }}>
+                                  {(parsedItems || []).slice(0, 2).map((it, iIdx) => (
+                                    <div key={iIdx} style={{ fontSize: '0.76rem', color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      <strong style={{ color: '#15733E' }}>{it.quantity}x</strong> {it.title}
+                                      {it.unit && <span style={{ color: '#6B7280', fontSize: '0.7rem' }}> ({it.unit})</span>}
+                                    </div>
+                                  ))}
+                                  {(parsedItems || []).length > 2 && (
+                                    <span style={{ fontSize: '0.68rem', color: '#6B7280', fontStyle: 'italic' }}>
+                                      + {(parsedItems.length - 2)} more items
+                                    </span>
+                                  )}
+                                  {isRental && (
+                                    <div style={{ fontSize: '0.68rem', color: '#166534', fontWeight: 700, marginTop: '2px' }}>
+                                      🚜 Custom Hiring Agreement Included
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Col F: Total Amount (₹) */}
+                              <td style={{ padding: '8px 10px', textAlign: 'right', borderRight: '1px solid #E1DFDD' }}>
+                                <div style={{ fontWeight: 900, color: '#15733E', fontSize: '0.94rem', fontFamily: 'monospace' }}>
+                                  ₹{o.totalAmount.toLocaleString('en-IN')}
+                                </div>
+                              </td>
+
+                              {/* Col G: Payment Status & Method */}
+                              <td style={{ padding: '8px 10px', textAlign: 'center', borderRight: '1px solid #E1DFDD' }}>
+                                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#4B5563', marginBottom: '2px' }}>
+                                  {o.paymentMethod}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleTogglePaymentStatus(o.id, (o.paymentStatus || 'PENDING').toUpperCase());
+                                  }}
+                                  style={{
+                                    fontSize: '0.7rem',
+                                    padding: '2px 7px',
+                                    borderRadius: '12px',
+                                    border: (o.paymentStatus || '').toUpperCase() === 'PAID' ? '1px solid #86EFAC' : '1px solid #FCD34D',
+                                    background: (o.paymentStatus || '').toUpperCase() === 'PAID' ? '#DCFCE7' : '#FEF3C7',
+                                    color: (o.paymentStatus || '').toUpperCase() === 'PAID' ? '#166534' : '#92400E',
+                                    cursor: 'pointer',
+                                    fontWeight: 800,
+                                  }}
+                                  title="Click to toggle Paid / Pending"
+                                >
+                                  {(o.paymentStatus || '').toUpperCase() === 'PAID' ? '✓ PAID' : '⏳ PENDING'}
+                                </button>
+                              </td>
+
+                              {/* Col H: Fulfillment Status */}
+                              <td style={{ padding: '8px 10px', textAlign: 'center', borderRight: '1px solid #E1DFDD' }}>
+                                <select
+                                  value={o.orderStatus || o.status || 'PENDING'}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
+                                  className="form-select admin-order-status-select"
+                                  style={{ margin: 0, padding: '3px 6px', fontSize: '0.74rem', border: '1px solid #D1D5DB' }}
+                                >
+                                  <option value="PENDING">Pending</option>
+                                  <option value="CONFIRMED">Confirmed</option>
+                                  <option value="PROCESSING">Processing</option>
+                                  <option value="SHIPPED">Shipped</option>
+                                  <option value="DELIVERED">Delivered</option>
+                                  <option value="CANCELLED">Cancelled</option>
+                                </select>
+                              </td>
+
+                              {/* Col I: Actions / Dispatch */}
+                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                <div style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleViewPastBill(o)}
+                                    style={{
+                                      padding: '4px 7px',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 700,
+                                      borderRadius: '4px',
+                                      border: '1px solid #D1D5DB',
+                                      background: '#FFFFFF',
+                                      color: '#15733E',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                    }}
+                                    title="View & Print Official Tax Invoice"
+                                  >
+                                    <Receipt size={12} color="#15733E" />
+                                    <span>Bill</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleWhatsAppPastBill(o)}
+                                    style={{
+                                      padding: '4px 7px',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 700,
+                                      borderRadius: '4px',
+                                      border: '1px solid #BBF7D0',
+                                      background: '#F0FDF4',
+                                      color: '#15803D',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                    }}
+                                    title="Send Official PDF Bill to Customer on WhatsApp"
+                                  >
+                                    <Send size={12} />
+                                    <span>PDF</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditOrderModal(o)}
+                                    style={{
+                                      padding: '4px 6px',
+                                      borderRadius: '4px',
+                                      border: '1px solid #D1D5DB',
+                                      background: '#FFFFFF',
+                                      color: '#4B5563',
+                                      cursor: 'pointer',
+                                    }}
+                                    title="Edit Order / Bill Record"
+                                  >
+                                    <Edit size={12} />
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteOrder(o.id, o.orderNumber)}
+                                    style={{
+                                      padding: '4px 6px',
+                                      borderRadius: '4px',
+                                      border: '1px solid #FECACA',
+                                      background: '#FEF2F2',
+                                      color: '#DC2626',
+                                      cursor: 'pointer',
+                                    }}
+                                    title="Permanently Delete Record"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+
+                      {/* AutoSum Accounting Total Footer Row */}
+                      <tfoot>
+                        <tr
+                          style={{
+                            background: '#FAF9F8',
+                            borderTop: '2px solid #15733E',
+                            borderBottom: '3px double #15733E',
+                            fontWeight: 800,
+                          }}
+                        >
+                          <td style={{ textAlign: 'center', padding: '10px 4px', background: '#F3F2F1', borderRight: '1px solid #D2D0CE', color: '#15733E' }}>
+                            Σ
+                          </td>
+                          <td colSpan={4} style={{ padding: '10px 12px', borderRight: '1px solid #E1DFDD', color: '#15733E' }}>
+                            =AUTOSUM_TOTALS ({filteredHistory.length} Filtered Ledger Rows)
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'left', borderRight: '1px solid #E1DFDD', color: '#6B7280', fontSize: '0.74rem' }}>
+                            Gross Ledger Balance:
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', borderRight: '1px solid #E1DFDD', color: '#15733E', fontSize: '1.05rem', fontFamily: 'monospace' }}>
+                            ₹{filteredHistory.reduce((s, o) => s + (o.totalAmount || 0), 0).toLocaleString('en-IN')}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', borderRight: '1px solid #E1DFDD', fontSize: '0.74rem' }}>
+                            <span style={{ color: '#16A34A' }}>
+                              ✓ ₹{filteredHistory.filter((o) => (o.paymentStatus || '').toUpperCase() === 'PAID').reduce((s, o) => s + (o.totalAmount || 0), 0).toLocaleString('en-IN')}
+                            </span>
+                            <br />
+                            <span style={{ color: '#D97706' }}>
+                              ⏳ ₹{filteredHistory.filter((o) => (o.paymentStatus || '').toUpperCase() === 'PENDING').reduce((s, o) => s + (o.totalAmount || 0), 0).toLocaleString('en-IN')}
+                            </span>
+                          </td>
+                          <td colSpan={2} style={{ padding: '10px 12px', textAlign: 'center', color: '#6B7280', fontSize: '0.72rem' }}>
+                            Audit Confirmed • SachiKheti
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                ) : (
+                  /* Cards View Mode */
+                  <div style={{ padding: '16px' }}>
+                    <div className="admin-orders-grid">
                       {filteredHistory.map((o) => {
                         const isPos = (o.orderNumber || '').startsWith('SK-BILL') || (o.notes || '').includes('[Custom POS Bill]');
                         let parsedItems = [];
@@ -4375,142 +4788,99 @@ export default function AdminPortalPage({ onNavigateHome }) {
                         } catch (e) {}
 
                         return (
-                          <tr key={o.id}>
-                            {/* Bill / Order # */}
-                            <td>
-                              <div style={{ fontWeight: 800, color: '#111827', fontSize: '0.88rem' }}>
-                                {o.orderNumber}
+                          <div key={o.id} className="admin-order-card" style={{ borderLeft: '4px solid #15733E' }}>
+                            <div className="admin-order-card-header">
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <div className="admin-order-id" style={{ fontFamily: 'monospace', color: '#15733E' }}>
+                                    {o.orderNumber}
+                                  </div>
+                                  <span className={`badge ${isPos ? 'badge-blue' : 'badge-gold'}`} style={{ fontSize: '0.68rem', padding: '1px 5px' }}>
+                                    {isPos ? 'POS Bill' : 'Web Store'}
+                                  </span>
+                                </div>
+                                <div className="admin-order-date">
+                                  <Calendar size={13} />
+                                  <span>{new Date(o.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                </div>
                               </div>
-                              <span
-                                className={`badge ${isPos ? 'badge-blue' : (o.paymentMethod === 'WHATSAPP' ? 'badge-green' : 'badge-gold')}`}
-                                style={{ fontSize: '0.68rem', padding: '1px 6px', marginTop: '2px', display: 'inline-block' }}
-                              >
-                                {isPos ? 'POS Bill' : (o.paymentMethod === 'WHATSAPP' ? 'WhatsApp' : 'Web Store')}
-                              </span>
-                            </td>
+                              <div style={{ textAlign: 'right' }}>
+                                <div className="admin-order-amount" style={{ color: '#15733E', fontFamily: 'monospace' }}>
+                                  ₹{o.totalAmount.toLocaleString('en-IN')}
+                                </div>
+                                <span className={`badge ${(o.paymentStatus || '').toUpperCase() === 'PAID' ? 'badge-green' : 'badge-gold'}`} style={{ fontSize: '0.72rem' }}>
+                                  {o.paymentMethod} • {(o.paymentStatus || '').toUpperCase() === 'PAID' ? 'PAID' : 'DUE'}
+                                </span>
+                              </div>
+                            </div>
 
-                            {/* Date & Time */}
-                            <td>
-                              <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>
-                                {new Date(o.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                              </div>
-                              <div style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>
-                                {new Date(o.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                              </div>
-                            </td>
-
-                            {/* Customer */}
-                            <td>
-                              <div style={{ fontWeight: 700, color: '#111827', fontSize: '0.85rem' }}>
-                                {o.customerName}
-                              </div>
-                              <div style={{ fontSize: '0.75rem', color: '#15733E', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <Phone size={11} />
-                                <a href={`tel:${o.customerPhone}`} style={{ color: '#15733E', textDecoration: 'none' }}>
+                            <div className="admin-order-customer-box">
+                              <div className="admin-order-customer-name">{o.customerName}</div>
+                              <div className="admin-order-customer-detail">
+                                <Phone size={14} color="#15733E" />
+                                <a href={`tel:${o.customerPhone}`} style={{ color: '#15733E', textDecoration: 'underline' }}>
                                   {o.customerPhone}
                                 </a>
-                              </div>
-                              {o.city && (
-                                <div style={{ fontSize: '0.72rem', color: '#6B7280' }}>
-                                  📍 {o.city}
-                                </div>
-                              )}
-                            </td>
-
-                            {/* Items Purchased */}
-                            <td>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '240px' }}>
-                                {(parsedItems || []).slice(0, 2).map((it, idx) => (
-                                  <div key={idx} style={{ fontSize: '0.78rem', color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    <strong style={{ color: '#15733E' }}>{it.quantity}x</strong> {it.title}
-                                  </div>
-                                ))}
-                                {(parsedItems || []).length > 2 && (
-                                  <span style={{ fontSize: '0.7rem', color: '#6B7280', fontStyle: 'italic' }}>
-                                    + {(parsedItems.length - 2)} more items
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-
-                            {/* Total Amount */}
-                            <td>
-                              <div style={{ fontWeight: 900, color: '#15733E', fontSize: '0.96rem' }}>
-                                ₹{o.totalAmount.toLocaleString('en-IN')}
-                              </div>
-                            </td>
-
-                            {/* Payment Method & Status (Clickable Toggle) */}
-                            <td>
-                              <div style={{ fontSize: '0.76rem', fontWeight: 600, color: '#4B5563', marginBottom: '3px' }}>
-                                {o.paymentMethod}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleTogglePaymentStatus(o.id, (o.paymentStatus || 'PENDING').toUpperCase())}
-                                className={`badge ${(o.paymentStatus || '').toUpperCase() === 'PAID' ? 'badge-green' : 'badge-gold'}`}
-                                style={{
-                                  fontSize: '0.72rem',
-                                  padding: '2px 8px',
-                                  cursor: 'pointer',
-                                  border: 'none',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  fontWeight: 700,
-                                }}
-                                title="Click to toggle Paid / Pending"
-                              >
-                                {(o.paymentStatus || '').toUpperCase() === 'PAID' ? '✓ PAID' : '⏳ PENDING'}
-                              </button>
-                            </td>
-
-                            {/* Fulfillment Status Dropdown */}
-                            <td>
-                              <select
-                                value={o.orderStatus || o.status || 'PENDING'}
-                                onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
-                                className="form-select admin-order-status-select"
-                                style={{ margin: 0, padding: '4px 6px', fontSize: '0.78rem' }}
-                              >
-                                <option value="PENDING">Pending</option>
-                                <option value="CONFIRMED">Confirmed</option>
-                                <option value="PROCESSING">Processing</option>
-                                <option value="SHIPPED">Shipped</option>
-                                <option value="DELIVERED">Delivered</option>
-                                <option value="CANCELLED">Cancelled</option>
-                              </select>
-                            </td>
-
-                            {/* Actions */}
-                            <td style={{ textAlign: 'right' }}>
-                              <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-                                <button
-                                  type="button"
-                                  onClick={() => handleViewPastBill(o)}
-                                  className="btn btn-secondary btn-sm"
-                                  style={{ padding: '5px 8px', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                                  title="View & Print Official Tax Invoice"
-                                >
-                                  <Receipt size={13} color="#15733E" />
-                                  <span>Bill</span>
-                                </button>
                                 <button
                                   type="button"
                                   onClick={() => handleWhatsAppPastBill(o)}
                                   className="btn btn-secondary btn-sm"
-                                  style={{ padding: '5px 8px', fontSize: '0.76rem', color: '#16A34A', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                                  title="Send Bill to Customer on WhatsApp"
+                                  style={{ padding: '2px 8px', fontSize: '0.75rem', marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#16A34A' }}
                                 >
-                                  <Send size={13} />
-                                  <span>WA</span>
+                                  <Send size={12} />
+                                  <span>Send WA PDF</span>
+                                </button>
+                              </div>
+                              {o.address && (
+                                <div className="admin-order-customer-detail">
+                                  <MapPin size={14} color="#7A8B80" />
+                                  <span>{o.address}, {o.city}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="admin-order-items-list">
+                              <div className="admin-order-items-title">Purchased Items:</div>
+                              {(parsedItems || []).map((item, idx) => (
+                                <div key={idx} className="admin-order-item-row">
+                                  <span><strong>{item.quantity}x</strong> {item.title}</span>
+                                  <span>₹{(item.price * item.quantity).toLocaleString('en-IN')}</span>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="admin-order-status-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>Status:</span>
+                                <select
+                                  value={o.orderStatus || o.status}
+                                  onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
+                                  className="form-select admin-order-status-select"
+                                  style={{ fontSize: '0.78rem', padding: '3px 6px' }}
+                                >
+                                  <option value="PENDING">Pending</option>
+                                  <option value="CONFIRMED">Confirmed</option>
+                                  <option value="PROCESSING">Processing</option>
+                                  <option value="SHIPPED">Shipped</option>
+                                  <option value="DELIVERED">Delivered</option>
+                                  <option value="CANCELLED">Cancelled</option>
+                                </select>
+                              </div>
+
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleViewPastBill(o)}
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                >
+                                  <Receipt size={13} color="#15733E" />
+                                  <span>Print Bill</span>
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => openEditOrderModal(o)}
                                   className="btn btn-secondary btn-sm"
-                                  style={{ padding: '5px 7px' }}
-                                  title="Edit Order / Bill Record"
                                 >
                                   <Edit size={13} />
                                 </button>
@@ -4518,151 +4888,128 @@ export default function AdminPortalPage({ onNavigateHome }) {
                                   type="button"
                                   onClick={() => handleDeleteOrder(o.id, o.orderNumber)}
                                   className="btn btn-secondary btn-sm text-red"
-                                  style={{ padding: '5px 7px' }}
-                                  title="Permanently Delete Record"
                                 >
                                   <Trash2 size={13} />
                                 </button>
                               </div>
-                            </td>
-                          </tr>
+                            </div>
+                          </div>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. EXCEL WORKBOOK SHEET TABS (Bottom Bar) */}
+                <div
+                  style={{
+                    background: '#F3F2F1',
+                    borderTop: '1px solid #D2D0CE',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '0 12px',
+                    overflowX: 'auto',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                  }}
+                >
+                  {/* Sheet Tabs */}
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', paddingTop: '4px' }}>
+                    {[
+                      { id: 'all', label: '📄 All Bills & Orders', count: orders.length },
+                      { id: 'pos', label: '🛒 POS Counter Bills', count: historyPosBillsCount },
+                      { id: 'rental', label: '🚜 Machinery Rentals', count: historyRentalCount },
+                      { id: 'due', label: '⏳ Due Khata', count: historyDueCount },
+                      { id: 'online', label: '🌐 Web Store', count: historyStoreOrdersCount },
+                    ].map((tab) => {
+                      const isActive = historyActiveSheet === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => {
+                            setHistoryActiveSheet(tab.id);
+                            if (tab.id === 'all') {
+                              setHistoryTypeFilter('all');
+                              setHistoryPaymentStatusFilter('all');
+                            } else if (tab.id === 'pos') {
+                              setHistoryTypeFilter('pos');
+                              setHistoryPaymentStatusFilter('all');
+                            } else if (tab.id === 'due') {
+                              setHistoryTypeFilter('all');
+                              setHistoryPaymentStatusFilter('PENDING');
+                            } else if (tab.id === 'online') {
+                              setHistoryTypeFilter('store');
+                              setHistoryPaymentStatusFilter('all');
+                            }
+                          }}
+                          style={{
+                            padding: '6px 14px',
+                            fontSize: '0.74rem',
+                            fontWeight: isActive ? 800 : 600,
+                            color: isActive ? '#15733E' : '#4B5563',
+                            background: isActive ? '#FFFFFF' : '#E1DFDD',
+                            border: '1px solid #D2D0CE',
+                            borderBottom: isActive ? '2px solid #FFFFFF' : '1px solid #D2D0CE',
+                            borderTop: isActive ? '3px solid #15733E' : '1px solid #D2D0CE',
+                            borderRadius: '6px 6px 0 0',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            marginBottom: isActive ? '-1px' : '0',
+                            zIndex: isActive ? 2 : 1,
+                            boxShadow: isActive ? '0 -1px 3px rgba(0,0,0,0.05)' : 'none',
+                            transition: 'all 0.1s ease',
+                          }}
+                        >
+                          <span>{tab.label}</span>
+                          <span
+                            style={{
+                              background: isActive ? '#EBF7EE' : '#D1D5DB',
+                              color: isActive ? '#15733E' : '#374151',
+                              fontSize: '0.66rem',
+                              padding: '1px 5px',
+                              borderRadius: '8px',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {tab.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Excel Status Bar on Right */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.72rem', color: '#605E5C', padding: '6px 0' }}>
+                    <span style={{ fontWeight: 700, color: '#15733E' }}>● READY</span>
+                    <span>•</span>
+                    <span>Count: <strong>{filteredHistory.length}</strong></span>
+                    <span>•</span>
+                    <span>Sum: <strong style={{ color: '#15733E', fontFamily: 'monospace' }}>₹{filteredHistory.reduce((s, o) => s + (o.totalAmount || 0), 0).toLocaleString('en-IN')}</strong></span>
+                    <span>•</span>
+                    <span>Avg: <strong style={{ fontFamily: 'monospace' }}>₹{filteredHistory.length ? Math.round(filteredHistory.reduce((s, o) => s + (o.totalAmount || 0), 0) / filteredHistory.length).toLocaleString('en-IN') : 0}</strong></span>
+                    <span>•</span>
+                    <span>Zoom: 100%</span>
+                  </div>
                 </div>
-              )}
-
-              {/* CARDS VIEW */}
-              {historyViewMode === 'cards' && (
-                <div className="admin-orders-grid">
-                  {filteredHistory.map((o) => {
-                    const isPos = (o.orderNumber || '').startsWith('SK-BILL') || (o.notes || '').includes('[Custom POS Bill]');
-                    let parsedItems = [];
-                    try {
-                      parsedItems = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
-                    } catch (e) {}
-
-                    return (
-                      <div key={o.id} className="admin-order-card">
-                        <div className="admin-order-card-header">
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <div className="admin-order-id">{o.orderNumber}</div>
-                              <span className={`badge ${isPos ? 'badge-blue' : 'badge-gold'}`} style={{ fontSize: '0.68rem', padding: '1px 5px' }}>
-                                {isPos ? 'POS Bill' : 'Web Store'}
-                              </span>
-                            </div>
-                            <div className="admin-order-date">
-                              <Calendar size={13} />
-                              <span>{new Date(o.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                            </div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div className="admin-order-amount">₹{o.totalAmount.toLocaleString('en-IN')}</div>
-                            <span className={`badge ${(o.paymentStatus || '').toUpperCase() === 'PAID' ? 'badge-green' : 'badge-gold'}`} style={{ fontSize: '0.72rem' }}>
-                              {o.paymentMethod} • {(o.paymentStatus || '').toUpperCase() === 'PAID' ? 'PAID' : 'DUE'}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="admin-order-customer-box">
-                          <div className="admin-order-customer-name">{o.customerName}</div>
-                          <div className="admin-order-customer-detail">
-                            <Phone size={14} color="#15733E" />
-                            <a href={`tel:${o.customerPhone}`} style={{ color: '#15733E', textDecoration: 'underline' }}>
-                              {o.customerPhone}
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => handleWhatsAppPastBill(o)}
-                              className="btn btn-secondary btn-sm"
-                              style={{ padding: '2px 8px', fontSize: '0.75rem', marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#16A34A' }}
-                            >
-                              <Send size={12} />
-                              <span>Send WA Bill</span>
-                            </button>
-                          </div>
-                          {o.address && (
-                            <div className="admin-order-customer-detail">
-                              <MapPin size={14} color="#7A8B80" />
-                              <span>{o.address}, {o.city}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="admin-order-items-list">
-                          <div className="admin-order-items-title">Purchased Items:</div>
-                          {(parsedItems || []).map((item, idx) => (
-                            <div key={idx} className="admin-order-item-row">
-                              <span><strong>{item.quantity}x</strong> {item.title}</span>
-                              <span>₹{(item.price * item.quantity).toLocaleString('en-IN')}</span>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="admin-order-status-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>Status:</span>
-                            <select
-                              value={o.orderStatus || o.status}
-                              onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
-                              className="form-select admin-order-status-select"
-                              style={{ fontSize: '0.78rem', padding: '3px 6px' }}
-                            >
-                              <option value="PENDING">Pending</option>
-                              <option value="CONFIRMED">Confirmed</option>
-                              <option value="PROCESSING">Processing</option>
-                              <option value="SHIPPED">Shipped</option>
-                              <option value="DELIVERED">Delivered</option>
-                              <option value="CANCELLED">Cancelled</option>
-                            </select>
-                          </div>
-
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleViewPastBill(o)}
-                              className="btn btn-secondary btn-sm"
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              <Receipt size={13} color="#15733E" />
-                              <span>Print Bill</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openEditOrderModal(o)}
-                              className="btn btn-secondary btn-sm"
-                            >
-                              <Edit size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteOrder(o.id, o.orderNumber)}
-                              className="btn btn-secondary btn-sm text-red"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              </div>
 
               {/* Empty Search/Filter State */}
               {filteredHistory.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '60px 20px', background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E5E7EB', marginTop: '16px' }}>
-                  <History size={40} color="#9CA3AF" style={{ margin: '0 auto 12px' }} />
-                  <h3 style={{ fontSize: '1.2rem', color: '#111827', marginBottom: '6px' }}>No Orders or Bills Match Your Search</h3>
-                  <p style={{ color: '#6B7280', fontSize: '0.88rem', maxWidth: '420px', margin: '0 auto 14px' }}>
+                <div style={{ textAlign: 'center', padding: '50px 20px', background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E5E7EB', marginTop: '16px' }}>
+                  <History size={36} color="#9CA3AF" style={{ margin: '0 auto 10px' }} />
+                  <h3 style={{ fontSize: '1.1rem', color: '#111827', marginBottom: '6px' }}>No Orders or Bills Match Your Search</h3>
+                  <p style={{ color: '#6B7280', fontSize: '0.84rem', maxWidth: '420px', margin: '0 auto 12px' }}>
                     Try searching with another keyword or reset the filter criteria to see all historical records.
                   </p>
                   <button
                     type="button"
                     onClick={() => {
                       setHistorySearch('');
+                      setHistoryActiveSheet('all');
                       setHistoryTypeFilter('all');
                       setHistoryPaymentStatusFilter('all');
                       setHistoryPaymentMethodFilter('all');
@@ -4670,7 +5017,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                     }}
                     className="btn btn-secondary btn-sm"
                   >
-                    Reset All Filters
+                    Reset Worksheet Filters
                   </button>
                 </div>
               )}
@@ -4859,7 +5206,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                       marginBottom: '20px',
                     }}
                   >
-                    {/* Header with Title and Single-Device Security Badge */}
+                    {/* Header with Title */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '14px', marginBottom: '20px' }}>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -4871,47 +5218,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
                         <p style={{ fontSize: '0.84rem', color: '#6B7280', marginTop: '4px' }}>
                           Direct server-side WhatsApp Web session for automated invoice & bill dispatching without opening external apps.
                         </p>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '4px 10px',
-                            borderRadius: '20px',
-                            background: '#EFF6FF',
-                            color: '#1D4ED8',
-                            fontSize: '0.74rem',
-                            fontWeight: 800,
-                            border: '1px solid #BFDBFE',
-                          }}
-                        >
-                          🔒 Single Active Device Enforced
-                        </span>
-
-                        {whatsappStatus?.status === 'CONNECTED' ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '20px', background: '#D1FAE5', color: '#065F46', fontWeight: 800, fontSize: '0.82rem', border: '1px solid #A7F3D0' }}>
-                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#059669', boxShadow: '0 0 6px #059669' }} />
-                            Live +{whatsappStatus.user?.phone || 'Connected'}
-                          </span>
-                        ) : whatsappStatus?.status === 'SCAN_QR' ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '20px', background: '#FEF3C7', color: '#92400E', fontWeight: 800, fontSize: '0.82rem', border: '1px solid #FDE68A' }}>
-                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#D97706' }} />
-                            Awaiting QR Scan
-                          </span>
-                        ) : whatsappStatus?.status === 'CONNECTING' ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '20px', background: '#EFF6FF', color: '#1D4ED8', fontWeight: 800, fontSize: '0.82rem', border: '1px solid #BFDBFE' }}>
-                            <RefreshCw size={12} className="spin" />
-                            Connecting Baileys...
-                          </span>
-                        ) : (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '20px', background: '#F3F4F6', color: '#4B5563', fontWeight: 700, fontSize: '0.82rem', border: '1px solid #E5E7EB' }}>
-                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#9CA3AF' }} />
-                            Disconnected
-                          </span>
-                        )}
                       </div>
                     </div>
 
@@ -7084,6 +7390,244 @@ export default function AdminPortalPage({ onNavigateHome }) {
                 </button>
                 <button type="submit" className="btn btn-primary">
                   Add Item to Cart
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* ==================================================== */}
+      {/* STOCK & QUANTITY ADJUSTMENT MODAL                    */}
+      {/* ==================================================== */}
+      {stockModalProduct && (
+        <div className="modal-overlay" style={{ zIndex: 660 }} onClick={() => setStockModalProduct(null)}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: '440px', padding: '24px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Package size={20} color="#15733E" />
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: '#1B2E23' }}>
+                  Adjust Stock & Quantity
+                </h3>
+              </div>
+              <button
+                onClick={() => setStockModalProduct(null)}
+                className="modal-close-btn"
+                type="button"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#F9FAFB', borderRadius: '10px', marginBottom: '18px' }}>
+              <img
+                src={stockModalProduct.imageUrl}
+                alt={stockModalProduct.title}
+                style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }}
+              />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#1F2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {stockModalProduct.title}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#6B7280' }}>
+                  {stockModalProduct.category?.name || 'Produce'} • ₹{stockModalProduct.price} / {stockModalProduct.unit}
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveStockModal}>
+              {/* In Stock / Out of Stock Fast Toggle */}
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" style={{ fontWeight: 700, marginBottom: '8px', display: 'block' }}>
+                  Inventory Status
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStockStatusToggle(true);
+                      if (parseInt(stockQuantityInput, 10) <= 0) {
+                        setStockQuantityInput(50);
+                      }
+                    }}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: stockStatusToggle ? '2px solid #16A34A' : '1px solid #D1D5DB',
+                      background: stockStatusToggle ? '#DCFCE7' : '#FFFFFF',
+                      color: stockStatusToggle ? '#15803D' : '#4B5563',
+                      fontWeight: 800,
+                      fontSize: '0.86rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <span>✓ IN STOCK</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStockStatusToggle(false);
+                      setStockQuantityInput(0);
+                    }}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: !stockStatusToggle ? '2px solid #DC2626' : '1px solid #D1D5DB',
+                      background: !stockStatusToggle ? '#FEE2E2' : '#FFFFFF',
+                      color: !stockStatusToggle ? '#DC2626' : '#4B5563',
+                      fontWeight: 800,
+                      fontSize: '0.86rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <span>✕ OUT OF STOCK</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Exact Stock Quantity Input with Quick Increment Buttons */}
+              <div className="form-group" style={{ marginBottom: '20px' }}>
+                <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Available Units / Quantity ({stockModalProduct.unit || 'units'}):</span>
+                  <span style={{ color: stockQuantityInput > 0 ? '#15733E' : '#DC2626', fontWeight: 800 }}>
+                    {stockQuantityInput > 0 ? `${stockQuantityInput} in stock` : 'Depleted (0)'}
+                  </span>
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = Math.max(0, (parseInt(stockQuantityInput, 10) || 0) - 10);
+                      setStockQuantityInput(next);
+                      setStockStatusToggle(next > 0);
+                    }}
+                    className="btn btn-secondary"
+                    style={{ padding: '8px 12px', fontWeight: 700 }}
+                    title="Decrease by 10"
+                  >
+                    -10
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = Math.max(0, (parseInt(stockQuantityInput, 10) || 0) - 1);
+                      setStockQuantityInput(next);
+                      setStockStatusToggle(next > 0);
+                    }}
+                    className="btn btn-secondary"
+                    style={{ padding: '8px 12px', fontWeight: 700 }}
+                    title="Decrease by 1"
+                  >
+                    -1
+                  </button>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={stockQuantityInput}
+                    onChange={(e) => {
+                      const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+                      setStockQuantityInput(val);
+                      setStockStatusToggle(val > 0);
+                    }}
+                    className="form-input"
+                    style={{
+                      textAlign: 'center',
+                      fontSize: '1.15rem',
+                      fontWeight: 800,
+                      margin: 0,
+                      color: stockQuantityInput > 0 ? '#111827' : '#9CA3AF',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = (parseInt(stockQuantityInput, 10) || 0) + 1;
+                      setStockQuantityInput(next);
+                      setStockStatusToggle(true);
+                    }}
+                    className="btn btn-secondary"
+                    style={{ padding: '8px 12px', fontWeight: 700 }}
+                    title="Increase by 1"
+                  >
+                    +1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = (parseInt(stockQuantityInput, 10) || 0) + 10;
+                      setStockQuantityInput(next);
+                      setStockStatusToggle(true);
+                    }}
+                    className="btn btn-secondary"
+                    style={{ padding: '8px 12px', fontWeight: 700 }}
+                    title="Increase by 10"
+                  >
+                    +10
+                  </button>
+                </div>
+
+                {/* Quick preset buttons */}
+                <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
+                  {[0, 10, 25, 50, 100, 250].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => {
+                        setStockQuantityInput(preset);
+                        setStockStatusToggle(preset > 0);
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '4px 6px',
+                        borderRadius: '6px',
+                        border: stockQuantityInput === preset ? '1.5px solid #15733E' : '1px solid #E5E7EB',
+                        background: stockQuantityInput === preset ? '#ECFDF5' : '#F9FAFB',
+                        color: stockQuantityInput === preset ? '#15733E' : '#374151',
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {preset === 0 ? '0 (Out)' : preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setStockModalProduct(null)}
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingStockModal}
+                  className="btn btn-primary"
+                  style={{ minWidth: '130px' }}
+                >
+                  {savingStockModal ? (
+                    <>
+                      <RefreshCw size={14} className="spin" />
+                      <span>Updating...</span>
+                    </>
+                  ) : (
+                    <span>Update Stock</span>
+                  )}
                 </button>
               </div>
             </form>
