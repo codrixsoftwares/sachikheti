@@ -76,10 +76,14 @@ router.post('/', async (req, res) => {
     fs.writeFileSync(filePath, buffer);
 
     const localUrl = `/uploads/${safeFolder}/${finalFilename}`;
-    let finalUrl = localUrl;
+    const host = req.get('host') || 'sachikheti.com';
+    const proto = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+    const absoluteLocalUrl = `${proto}://${host}${localUrl}`;
+
+    let finalUrl = absoluteLocalUrl;
     let storageProvider = 'local';
 
-    // 1. Upload directly to Supabase Storage CDN via Secret Key
+    // 1. Upload directly to Supabase Storage CDN via Secret Key (bypasses RLS)
     const supabaseAdmin = getSupabaseAdmin();
     const supabaseBucket = process.env.SUPABASE_BUCKET || 'SachiKeti';
     if (supabaseAdmin) {
@@ -101,10 +105,10 @@ router.post('/', async (req, res) => {
             storageProvider = 'supabase';
           }
         } else if (error) {
-          console.warn(`[Supabase Admin Upload Warning]: ${error.message}. Serving local URL.`);
+          console.warn(`[Supabase Admin Upload Warning]: ${error.message}. Serving absolute local URL.`);
         }
       } catch (sbErr) {
-        console.warn(`[Supabase Admin Exception]: ${sbErr.message}. Serving local URL.`);
+        console.warn(`[Supabase Admin Exception]: ${sbErr.message}. Serving absolute local URL.`);
       }
     }
 

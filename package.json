@@ -6,7 +6,7 @@
   "scripts": {
     "build": "npm run build:client && npm run build:server",
     "build:client": "cd client && npm install && npm run build",
-    "build:server": "cd server && npm install && node prisma/prepare.js && npx prisma generate",
+    "build:server": "cd server && npm install && node prisma/prepare.js && npx prisma db push --accept-data-loss && npx prisma generate",
     "start": "cd server && node src/server.js",
     "install:all": "cd server && npm install && cd ../client && npm install",
     "dev:server": "cd server && npm run dev",

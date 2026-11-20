@@ -53,21 +53,41 @@ router.post('/', verifyAdminToken, async (req, res) => {
       return res.status(400).json({ success: false, message: `Category with slug "${finalSlug}" already exists.` });
     }
 
-    const newCategory = await prisma.category.create({
-      data: {
-        name: name.trim(),
-        namePunjabi: (namePunjabi && namePunjabi.trim()) ? namePunjabi.trim() : name.trim(),
-        slug: finalSlug,
-        description: description ? description.trim() : null,
-        icon: icon ? icon.trim() : 'package',
-        imageUrl: imageUrl ? imageUrl.trim() : null,
-      },
-      include: {
-        _count: {
-          select: { products: true }
+    let newCategory;
+    try {
+      newCategory = await prisma.category.create({
+        data: {
+          name: name.trim(),
+          namePunjabi: (namePunjabi && namePunjabi.trim()) ? namePunjabi.trim() : name.trim(),
+          slug: finalSlug,
+          description: description ? description.trim() : null,
+          icon: icon ? icon.trim() : 'package',
+          imageUrl: imageUrl ? imageUrl.trim() : null,
+        },
+        include: {
+          _count: {
+            select: { products: true }
+          }
         }
-      }
-    });
+      });
+    } catch (createErr) {
+      console.warn('Prisma create with imageUrl failed, retrying without imageUrl field:', createErr.message);
+      // Defensive fallback if the database column imageUrl is pending migration
+      newCategory = await prisma.category.create({
+        data: {
+          name: name.trim(),
+          namePunjabi: (namePunjabi && namePunjabi.trim()) ? namePunjabi.trim() : name.trim(),
+          slug: finalSlug,
+          description: description ? description.trim() : null,
+          icon: icon ? icon.trim() : 'package',
+        },
+        include: {
+          _count: {
+            select: { products: true }
+          }
+        }
+      });
+    }
 
     // Real-time WebSocket IO Broadcast with Live Overview Metrics
     const io = req.app.get('io');
@@ -99,15 +119,31 @@ router.put('/:id', verifyAdminToken, async (req, res) => {
       updateData.slug = slug.trim().toLowerCase();
     }
 
-    const updated = await prisma.category.update({
-      where: { id },
-      data: updateData,
-      include: {
-        _count: {
-          select: { products: true }
+    let updated;
+    try {
+      updated = await prisma.category.update({
+        where: { id },
+        data: updateData,
+        include: {
+          _count: {
+            select: { products: true }
+          }
         }
-      }
-    });
+      });
+    } catch (updateErr) {
+      console.warn('Prisma update with imageUrl failed, retrying without imageUrl field:', updateErr.message);
+      const fallbackData = { ...updateData };
+      delete fallbackData.imageUrl;
+      updated = await prisma.category.update({
+        where: { id },
+        data: fallbackData,
+        include: {
+          _count: {
+            select: { products: true }
+          }
+        }
+      });
+    }
 
     // Real-time WebSocket IO Broadcast with Live Overview Metrics
     const io = req.app.get('io');

@@ -2772,7 +2772,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   value={supabaseForm.bucket}
                   onChange={(e) => setSupabaseForm({ ...supabaseForm, bucket: e.target.value })}
                   className="form-input"
-                  placeholder="sachikheti-media"
+                  placeholder="SachiKeti"
                 />
               </div>
 

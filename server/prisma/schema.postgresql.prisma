@@ -27,6 +27,7 @@ model Category {
   slug        String    @unique
   description String?
   icon        String?
+  imageUrl    String?
   products    Product[]
   createdAt   DateTime  @default(now())
 }

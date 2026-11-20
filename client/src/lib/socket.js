@@ -15,9 +15,11 @@ export function getSocket() {
         : window.location.origin;
 
     socketInstance = io(socketUrl, {
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 15,
+      transports: ['polling', 'websocket'],
+      upgrade: true,
+      reconnectionAttempts: 25,
       reconnectionDelay: 1000,
+      timeout: 20000,
     });
   }
   return socketInstance;

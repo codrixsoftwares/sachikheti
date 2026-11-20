@@ -1442,7 +1442,7 @@ export default function AdminDashboard({ onClose }) {
                     <strong>Find your Public Anon Key:</strong> In your Supabase dashboard (project <code>sachikheti</code>), click the green <strong>"Connect"</strong> button at the top (or click <strong>API Keys</strong> in the bottom bar / Project Settings &rarr; API) and copy the <code>anon</code> / <code>public</code> key.
                   </li>
                   <li>
-                    <strong>Create Public Storage Bucket:</strong> In the left sidebar, click the <strong>Storage</strong> (bucket) icon &rarr; click <strong>"New bucket"</strong> &rarr; name it <code>sachikheti-media</code> &rarr; toggle <strong>"Public bucket"</strong> to <span style={{ color: '#15733E', fontWeight: 700 }}>ON</span> &rarr; click <strong>Save</strong>.
+                    <strong>Create Public Storage Bucket:</strong> In the left sidebar, click the <strong>Storage</strong> (bucket) icon &rarr; click <strong>"New bucket"</strong> &rarr; name it <code>SachiKeti</code> &rarr; toggle <strong>"Public bucket"</strong> to <span style={{ color: '#15733E', fontWeight: 700 }}>ON</span> &rarr; click <strong>Save</strong>.
                   </li>
                   <li>
                     <strong>Paste & Test:</strong> Paste your <code>anon</code> key below and click <strong>"Test Connection"</strong>.
@@ -1507,7 +1507,7 @@ export default function AdminDashboard({ onClose }) {
                     value={supabaseForm.bucket}
                     onChange={(e) => setSupabaseForm({ ...supabaseForm, bucket: e.target.value })}
                     className="form-input"
-                    placeholder="sachikheti-media"
+                    placeholder="SachiKeti"
                   />
                 </div>
 
