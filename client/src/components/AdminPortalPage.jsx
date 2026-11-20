@@ -2015,7 +2015,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
         )}
 
         {/* Content View Area */}
-        <main className="admin-portal-content admin-portal-main">
+        <main className={`admin-portal-content admin-portal-main ${(activeTab === 'customer-store' || activeTab === 'billing') ? 'pos-active-main' : ''}`}>
           {/* ==================================================== */}
           {/* TAB 1: OVERVIEW METRICS                              */}
           {/* ==================================================== */}
@@ -2350,8 +2350,8 @@ export default function AdminPortalPage({ onNavigateHome }) {
           {/* TAB: CUSTOMER STORE & VIRTUAL BILL POS TERMINAL     */}
           {/* ==================================================== */}
           {(activeTab === 'customer-store' || activeTab === 'billing') && (
-            <div className="admin-tab-view">
-              <div className="admin-view-header">
+            <div className="admin-tab-view pos-terminal-tab-view">
+              <div className="admin-view-header" style={{ marginBottom: '14px', flexShrink: 0 }}>
                 <div>
                   <h1 className="admin-view-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <Store size={28} color="#15733E" />
@@ -2387,15 +2387,29 @@ export default function AdminPortalPage({ onNavigateHome }) {
 
               {/* Responsive 2-Column Split: Customer Store Catalogs (Left) + Live Virtual Bill (Right) */}
               <div
+                className="pos-split-container"
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'minmax(0, 1.35fr) minmax(370px, 450px)',
-                  gap: '24px',
-                  alignItems: 'start',
+                  gridTemplateColumns: 'minmax(0, 1.35fr) minmax(380px, 450px)',
+                  gap: '20px',
+                  alignItems: 'stretch',
+                  flex: '1 1 auto',
+                  minHeight: 0,
+                  overflow: 'hidden',
                 }}
               >
-                {/* LEFT: Customer Store Catalog Browser */}
-                <div>
+                {/* LEFT: Customer Store Catalog Browser (Independently Scrollable) */}
+                <div
+                  className="pos-catalog-scroll"
+                  style={{
+                    height: '100%',
+                    overflowY: 'auto',
+                    paddingRight: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '16px',
+                  }}
+                >
                   {/* Search, Listing Filter & Category Chips */}
                   <div
                     style={{
@@ -2641,11 +2655,11 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   </div>
                 </div>
 
-                {/* RIGHT: Live Virtual Bill & Customized POS Slip */}
+                {/* RIGHT: Live Virtual Bill & Customized POS Slip (Stationary & Fixed to Viewport) */}
                 <div
+                  className="pos-bill-fixed"
                   style={{
-                    position: 'sticky',
-                    top: '88px',
+                    height: '100%',
                     background: '#FFFFFF',
                     borderRadius: '16px',
                     border: `2px solid ${billDesign.accentColor}`,
@@ -2658,12 +2672,13 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   {/* Bill Slip Customized Header */}
                   <div
                     style={{
-                      padding: '16px 20px',
+                      padding: '12px 18px',
                       background: billDesign.accentColor,
                       color: '#FFFFFF',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '4px',
+                      gap: '3px',
+                      flexShrink: 0,
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2695,12 +2710,13 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   {/* Bill Number & Cart Count Bar */}
                   <div
                     style={{
-                      padding: '10px 20px',
+                      padding: '8px 18px',
                       borderBottom: '1px solid #E5E7EB',
                       background: '#F9FAFB',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
+                      flexShrink: 0,
                     }}
                   >
                     <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#374151' }}>
@@ -2718,14 +2734,16 @@ export default function AdminPortalPage({ onNavigateHome }) {
 
                   {/* Cart Items List */}
                   <div
+                    className="pos-cart-items-scroll"
                     style={{
-                      padding: '14px 18px',
-                      maxHeight: '240px',
+                      padding: '12px 16px',
+                      flex: '1 1 auto',
+                      minHeight: '80px',
                       overflowY: 'auto',
                       borderBottom: '1px solid #E5E7EB',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '10px',
+                      gap: '8px',
                     }}
                   >
                     {billingCart.length === 0 ? (
@@ -2817,7 +2835,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   </div>
 
                   {/* Customer Information Panel */}
-                  <div style={{ padding: '14px 18px', borderBottom: '1px solid #E5E7EB', background: '#FFFFFF' }}>
+                  <div style={{ padding: '10px 16px', borderBottom: '1px solid #E5E7EB', background: '#FFFFFF', flexShrink: 0 }}>
                     <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
                       Customer & Payment Details
                     </div>
@@ -2889,7 +2907,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   </div>
 
                   {/* Pricing Breakdown & Disount */}
-                  <div style={{ padding: '14px 18px', background: '#F9FAFB' }}>
+                  <div style={{ padding: '12px 16px', background: '#F9FAFB', flexShrink: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#4B5563', marginBottom: '5px' }}>
                       <span>Subtotal:</span>
                       <span style={{ fontWeight: 600 }}>₹{billingSubtotal.toLocaleString('en-IN')}</span>

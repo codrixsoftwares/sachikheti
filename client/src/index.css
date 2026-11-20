@@ -4416,3 +4416,102 @@ a {
     box-shadow: none !important;
   }
 }
+
+/* ==================================================== */
+/* CUSTOMER STORE & POS TERMINAL 2-COLUMN SPLIT LAYOUT  */
+/* ==================================================== */
+.admin-portal-main.pos-active-main {
+  overflow-y: hidden;
+  padding: 20px 28px;
+}
+
+.pos-terminal-tab-view {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 40px);
+  min-height: 560px;
+}
+
+.pos-split-container {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(380px, 450px);
+  gap: 20px;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pos-catalog-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 #F1F5F9;
+}
+
+.pos-catalog-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.pos-catalog-scroll::-webkit-scrollbar-track {
+  background: #F1F5F9;
+  border-radius: 4px;
+}
+.pos-catalog-scroll::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+.pos-catalog-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+.pos-bill-fixed {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #FFFFFF;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+
+.pos-cart-items-scroll {
+  flex: 1 1 auto;
+  min-height: 80px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 #F9FAFB;
+}
+
+.pos-cart-items-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.pos-cart-items-scroll::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+
+@media (max-width: 1024px) {
+  .admin-portal-main.pos-active-main {
+    overflow-y: auto;
+    padding: 20px 16px;
+  }
+  .pos-terminal-tab-view {
+    height: auto !important;
+  }
+  .pos-split-container {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .pos-catalog-scroll {
+    height: auto !important;
+    overflow-y: visible !important;
+    padding-right: 0 !important;
+  }
+  .pos-bill-fixed {
+    height: auto !important;
+    overflow: visible !important;
+  }
+}
