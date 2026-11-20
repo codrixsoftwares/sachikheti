@@ -23,6 +23,9 @@ router.post('/', async (req, res) => {
       items,
       totalAmount,
       paymentMethod = 'WHATSAPP',
+      paymentStatus,
+      orderStatus,
+      orderNumber: customOrderNumber,
       notes = '',
       razorpayId = null
     } = req.body;
@@ -31,7 +34,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide all required delivery details and cart items.' });
     }
 
-    const orderNumber = generateOrderNumber();
+    const orderNumber = customOrderNumber || generateOrderNumber();
 
     const order = await prisma.order.create({
       data: {
@@ -42,19 +45,23 @@ router.post('/', async (req, res) => {
         city,
         pincode,
         items: typeof items === 'object' ? JSON.stringify(items) : items,
-        totalAmount: parseFloat(totalAmount),
+        totalAmount: parseFloat(String(totalAmount || '0').replace(/[^0-9.]/g, '')) || 0,
         paymentMethod,
-        paymentStatus: paymentMethod === 'RAZORPAY' && razorpayId ? 'COMPLETED' : 'PENDING',
-        orderStatus: paymentMethod === 'RAZORPAY' ? 'CONFIRMED' : 'PENDING',
+        paymentStatus: paymentStatus || (paymentMethod === 'RAZORPAY' && razorpayId ? 'COMPLETED' : 'PENDING'),
+        orderStatus: orderStatus || (paymentMethod === 'RAZORPAY' ? 'CONFIRMED' : 'PENDING'),
         razorpayId,
         notes,
       }
     });
 
     // Real-time WebSocket IO Broadcast with Live Overview Metrics
-    const io = req.app.get('io');
-    if (io) {
-      await broadcastRealtimeUpdate(io, 'orders:updated', { action: 'create', order: { ...order, status: order.orderStatus } });
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        await broadcastRealtimeUpdate(io, 'orders:updated', { action: 'create', order: { ...order, status: order.orderStatus } });
+      }
+    } catch (ioErr) {
+      console.warn('Socket broadcast warning:', ioErr.message);
     }
 
     res.status(201).json({

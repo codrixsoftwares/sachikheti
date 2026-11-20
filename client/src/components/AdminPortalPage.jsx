@@ -28,7 +28,16 @@ import {
   Calendar,
   FolderPlus,
   UploadCloud,
-  Database
+  Database,
+  Receipt,
+  Printer,
+  Send,
+  Minus,
+  ShoppingCart,
+  CreditCard,
+  FileText,
+  Tag,
+  User
 } from 'lucide-react';
 import {
   getSupabaseConfig,
@@ -86,6 +95,34 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const [productListingFilter, setProductListingFilter] = useState('all'); // 'all', 'featured', 'rent', 'sale'
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
+
+  // Custom Billing / Virtual Cart state
+  const [billingCart, setBillingCart] = useState([]);
+  const [billingCustomer, setBillingCustomer] = useState({
+    name: '',
+    phone: '',
+    address: 'Counter Store Sale / Local Delivery',
+    city: 'Fatehabad',
+    pincode: '125050',
+    paymentMethod: 'CASH',
+    paymentStatus: 'PAID',
+    notes: '',
+  });
+  const [billingDiscount, setBillingDiscount] = useState(0);
+  const [billingDelivery, setBillingDelivery] = useState(0);
+  const [billingSearch, setBillingSearch] = useState('');
+  const [billingCategoryFilter, setBillingCategoryFilter] = useState('all');
+  const [generatingBill, setGeneratingBill] = useState(false);
+  const [generatedInvoice, setGeneratedInvoice] = useState(null);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [showCustomItemModal, setShowCustomItemModal] = useState(false);
+  const [customItemForm, setCustomItemForm] = useState({
+    title: '',
+    titlePunjabi: '',
+    price: '',
+    quantity: 1,
+    unit: 'Unit',
+  });
 
   // Product Add / Edit Modal state
   const [showProductModal, setShowProductModal] = useState(false);
@@ -718,6 +755,214 @@ export default function AdminPortalPage({ onNavigateHome }) {
   };
 
   // ==========================================
+  // CUSTOM BILLING & VIRTUAL CART HANDLERS
+  // ==========================================
+  const addToBillingCart = (product) => {
+    setBillingCart((prev) => {
+      const existing = prev.find((item) => item.id === product.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        );
+      }
+      return [
+        ...prev,
+        {
+          id: product.id,
+          title: product.title,
+          titlePunjabi: product.titlePunjabi || product.title,
+          price: product.price,
+          originalPrice: product.price,
+          unit: product.unit || '1 kg',
+          imageUrl: product.imageUrl || '',
+          quantity: 1,
+        },
+      ];
+    });
+  };
+
+  const updateCartQty = (id, delta) => {
+    setBillingCart((prev) =>
+      prev
+        .map((item) => {
+          if (item.id === id) {
+            const newQty = item.quantity + delta;
+            return newQty > 0 ? { ...item, quantity: newQty } : null;
+          }
+          return item;
+        })
+        .filter(Boolean)
+    );
+  };
+
+  const updateCartPrice = (id, newPrice) => {
+    const parsed = parseFloat(String(newPrice).replace(/[^0-9.]/g, '')) || 0;
+    setBillingCart((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, price: parsed } : item))
+    );
+  };
+
+  const removeFromBillingCart = (id) => {
+    setBillingCart((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const clearBillingCart = () => {
+    if (billingCart.length === 0) return;
+    if (window.confirm('Clear all items from the current virtual cart?')) {
+      setBillingCart([]);
+      setBillingDiscount(0);
+      setBillingDelivery(0);
+    }
+  };
+
+  const handleAddCustomItem = (e) => {
+    e.preventDefault();
+    if (!customItemForm.title.trim()) {
+      alert('Please enter a description for the custom item');
+      return;
+    }
+    const price = parseFloat(String(customItemForm.price).replace(/[^0-9.]/g, '')) || 0;
+    const quantity = parseInt(customItemForm.quantity, 10) || 1;
+    const customItem = {
+      id: `custom-${Date.now()}`,
+      title: customItemForm.title.trim(),
+      titlePunjabi: customItemForm.titlePunjabi?.trim() || customItemForm.title.trim(),
+      price,
+      originalPrice: price,
+      quantity,
+      unit: customItemForm.unit || 'Unit',
+      imageUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=400&q=80',
+      isCustom: true,
+    };
+    setBillingCart((prev) => [...prev, customItem]);
+    setCustomItemForm({ title: '', titlePunjabi: '', price: '', quantity: 1, unit: 'Unit' });
+    setShowCustomItemModal(false);
+  };
+
+  const billingSubtotal = billingCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const billingGrandTotal = Math.max(0, billingSubtotal - Number(billingDiscount || 0) + Number(billingDelivery || 0));
+
+  const handleCreateBill = async () => {
+    if (billingCart.length === 0) {
+      alert('Please add at least one item to the virtual cart before generating a bill.');
+      return;
+    }
+    setGeneratingBill(true);
+    try {
+      const invNumber = `SK-BILL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const payload = {
+        orderNumber: invNumber,
+        customerName: billingCustomer.name.trim() || 'Direct Store Customer',
+        customerPhone: billingCustomer.phone.trim() || '8360253372',
+        address: billingCustomer.address.trim() || 'Store Direct / Local Delivery',
+        city: billingCustomer.city.trim() || 'Fatehabad',
+        pincode: billingCustomer.pincode.trim() || '125050',
+        items: billingCart.map((i) => ({
+          id: i.id,
+          title: i.title,
+          price: i.price,
+          quantity: i.quantity,
+          unit: i.unit,
+          subtotal: i.price * i.quantity,
+        })),
+        totalAmount: billingGrandTotal,
+        paymentMethod: billingCustomer.paymentMethod,
+        paymentStatus: billingCustomer.paymentStatus,
+        orderStatus: billingCustomer.paymentStatus === 'PAID' ? 'DELIVERED' : 'CONFIRMED',
+        notes: `[Custom POS Bill] ${billingCustomer.notes || ''} | Subtotal: ₹${billingSubtotal} | Discount: ₹${billingDiscount} | Delivery: ₹${billingDelivery}`,
+      };
+
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const fullInvoice = {
+          ...payload,
+          id: data.data?.id || invNumber,
+          date: new Date().toISOString(),
+          subtotal: billingSubtotal,
+          discount: Number(billingDiscount || 0),
+          delivery: Number(billingDelivery || 0),
+          items: [...billingCart],
+        };
+        setGeneratedInvoice(fullInvoice);
+        setShowInvoiceModal(true);
+        setBillingCart([]);
+        setBillingDiscount(0);
+        setBillingDelivery(0);
+        setBillingCustomer({
+          name: '',
+          phone: '',
+          address: 'Counter Store Sale / Local Delivery',
+          city: 'Fatehabad',
+          pincode: '125050',
+          paymentMethod: 'CASH',
+          paymentStatus: 'PAID',
+          notes: '',
+        });
+        setActionSuccess(`Official Bill #${invNumber} generated and recorded!`);
+        setTimeout(() => setActionSuccess(''), 5000);
+        loadAllData();
+      } else {
+        alert(data.message || 'Failed to generate bill');
+      }
+    } catch (err) {
+      alert('Network error while generating bill');
+    } finally {
+      setGeneratingBill(false);
+    }
+  };
+
+  const handlePrintInvoice = () => {
+    window.print();
+  };
+
+  const handleWhatsAppInvoice = (inv) => {
+    if (!inv) return;
+    const phone = (inv.customerPhone || '8360253372').replace(/[^0-9]/g, '');
+    const cleanPhone = phone.startsWith('91') ? phone : `91${phone}`;
+    const itemsLines = (inv.items || [])
+      .map(
+        (it, idx) =>
+          `${idx + 1}. *${it.title}* (${it.quantity} ${it.unit || ''}) - ₹${(it.price * it.quantity).toLocaleString('en-IN')}`
+      )
+      .join('\n');
+
+    const msg = encodeURIComponent(
+      `🌾 *SACHI KHETI (LFPC) - OFFICIAL TAX INVOICE* 🌾\n` +
+      `----------------------------------------\n` +
+      `*Bill No:* ${inv.orderNumber}\n` +
+      `*Date:* ${new Date(inv.date || Date.now()).toLocaleDateString('en-IN')}\n` +
+      `*Customer:* ${inv.customerName}\n` +
+      `*Contact:* ${inv.customerPhone}\n` +
+      `*Address:* ${inv.address}, ${inv.city}\n` +
+      `----------------------------------------\n` +
+      `*ITEMS PURCHASED:*\n` +
+      `${itemsLines}\n` +
+      `----------------------------------------\n` +
+      `*Subtotal:* ₹${(inv.subtotal || inv.totalAmount).toLocaleString('en-IN')}\n` +
+      (inv.discount ? `*Discount / Concession:* -₹${Number(inv.discount).toLocaleString('en-IN')}\n` : '') +
+      (inv.delivery ? `*Delivery / Freight:* +₹${Number(inv.delivery).toLocaleString('en-IN')}\n` : '') +
+      `*TOTAL AMOUNT:* ₹${Number(inv.totalAmount).toLocaleString('en-IN')}\n` +
+      `*Payment Mode:* ${inv.paymentMethod}\n` +
+      `*Payment Status:* ${inv.paymentStatus === 'PAID' ? 'PAID ✅' : 'DUE / PENDING ⏳'}\n` +
+      `----------------------------------------\n` +
+      `Thank you for supporting *SachiKheti*!\n` +
+      `Direct Farmer Prosperity • LFPC Ltd.\n` +
+      `📍 Fatehabad, Punjab/Haryana\n` +
+      `📞 +91 83602 53372`
+    );
+
+    window.open(`https://wa.me/${cleanPhone}?text=${msg}`, '_blank');
+  };
+
+  // ==========================================
   // ORDER STATUS UPDATE HANDLER
   // ==========================================
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
@@ -1316,6 +1561,19 @@ export default function AdminPortalPage({ onNavigateHome }) {
             </button>
 
             <button
+              onClick={() => { setActiveTab('billing'); setSidebarOpen(false); }}
+              className={`admin-nav-item ${activeTab === 'billing' ? 'active' : ''}`}
+            >
+              <Receipt size={18} />
+              <span>Custom Billing & POS</span>
+              {billingCart.length > 0 && (
+                <span className="badge badge-gold" style={{ fontSize: '0.72rem', padding: '2px 7px', marginLeft: 'auto' }}>
+                  {billingCart.length}
+                </span>
+              )}
+            </button>
+
+            <button
               onClick={() => { setActiveTab('orders'); setSidebarOpen(false); }}
               className={`admin-nav-item ${activeTab === 'orders' ? 'active' : ''}`}
             >
@@ -1792,6 +2050,501 @@ export default function AdminPortalPage({ onNavigateHome }) {
                         })()}
                       </svg>
                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ==================================================== */}
+          {/* TAB: CUSTOM BILLING & VIRTUAL CART TERMINAL         */}
+          {/* ==================================================== */}
+          {activeTab === 'billing' && (
+            <div className="admin-tab-view">
+              <div className="admin-view-header">
+                <div>
+                  <h1 className="admin-view-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Receipt size={28} color="#15733E" />
+                    <span>Custom Billing Terminal & POS</span>
+                  </h1>
+                  <p className="admin-view-sub">
+                    Create customized in-store bills, wholesale quotes, or machinery rental bookings with a live virtual cart, price adjustments, and printable official invoices.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomItemModal(true)}
+                    className="btn btn-secondary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Plus size={16} />
+                    <span>+ Add Custom Line Item</span>
+                  </button>
+                  {billingCart.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearBillingCart}
+                      className="btn btn-secondary text-red"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Trash2 size={15} />
+                      <span>Clear Cart</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Responsive 2-Column Split: Product Catalog (Left) + Virtual Cart & Billing (Right) */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1.35fr) minmax(360px, 440px)',
+                  gap: '24px',
+                  alignItems: 'start',
+                }}
+              >
+                {/* LEFT: Product Catalog Picker */}
+                <div>
+                  {/* Search and Category Filter Bar */}
+                  <div
+                    style={{
+                      background: '#FFFFFF',
+                      padding: '16px 20px',
+                      borderRadius: '14px',
+                      border: '1px solid #E5E7EB',
+                      marginBottom: '18px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                    }}
+                  >
+                    <div style={{ position: 'relative', marginBottom: '12px' }}>
+                      <Search
+                        size={17}
+                        style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#7A8B80' }}
+                      />
+                      <input
+                        type="text"
+                        value={billingSearch}
+                        onChange={(e) => setBillingSearch(e.target.value)}
+                        placeholder="Search product by title, category, unit, machinery..."
+                        className="form-input"
+                        style={{ paddingLeft: '38px', margin: 0 }}
+                      />
+                    </div>
+
+                    {/* Category Filter Pills */}
+                    <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setBillingCategoryFilter('all')}
+                        className={`btn btn-sm ${billingCategoryFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '0.78rem', padding: '4px 12px', whiteSpace: 'nowrap' }}
+                      >
+                        All Categories ({products.length})
+                      </button>
+                      {categories.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setBillingCategoryFilter(c.id)}
+                          className={`btn btn-sm ${billingCategoryFilter === c.id ? 'btn-primary' : 'btn-secondary'}`}
+                          style={{ fontSize: '0.78rem', padding: '4px 12px', whiteSpace: 'nowrap' }}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Product Cards Grid */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+                      gap: '14px',
+                    }}
+                  >
+                    {products
+                      .filter((p) => {
+                        const matchesSearch =
+                          !billingSearch ||
+                          p.title.toLowerCase().includes(billingSearch.toLowerCase()) ||
+                          (p.titlePunjabi && p.titlePunjabi.toLowerCase().includes(billingSearch.toLowerCase())) ||
+                          (p.description && p.description.toLowerCase().includes(billingSearch.toLowerCase()));
+                        const matchesCat = billingCategoryFilter === 'all' || p.categoryId === billingCategoryFilter;
+                        return matchesSearch && matchesCat;
+                      })
+                      .map((p) => {
+                        const inCartItem = billingCart.find((it) => it.id === p.id);
+                        return (
+                          <div
+                            key={p.id}
+                            style={{
+                              background: '#FFFFFF',
+                              borderRadius: '12px',
+                              border: inCartItem ? '2px solid #15733E' : '1px solid #E5E7EB',
+                              padding: '14px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              boxShadow: inCartItem ? '0 4px 12px rgba(21,115,62,0.12)' : '0 1px 3px rgba(0,0,0,0.04)',
+                              transition: 'all 0.2s ease',
+                              position: 'relative',
+                            }}
+                          >
+                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+                              <img
+                                src={p.imageUrl}
+                                alt={p.title}
+                                style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }}
+                              />
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1B2E23', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {p.title}
+                                </div>
+                                {p.titlePunjabi && p.titlePunjabi !== p.title && (
+                                  <div style={{ fontSize: '0.74rem', color: '#15733E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {p.titlePunjabi}
+                                  </div>
+                                )}
+                                <span style={{ fontSize: '0.72rem', color: '#7A8B80' }}>
+                                  {p.category?.name || 'Produce'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #F3F4F6' }}>
+                              <div>
+                                <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#15733E' }}>
+                                  ₹{p.price.toLocaleString('en-IN')}
+                                </span>
+                                <span style={{ fontSize: '0.74rem', color: '#7A8B80', marginLeft: '3px' }}>
+                                  / {p.unit}
+                                </span>
+                              </div>
+                              <span style={{ fontSize: '0.7rem', color: p.inStock ? '#065F46' : '#DC2626', fontWeight: 600 }}>
+                                {p.inStock ? `Stock: ${p.stockCount}` : 'Out of stock'}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => addToBillingCart(p)}
+                              className={`btn btn-sm ${inCartItem ? 'btn-primary' : 'btn-secondary'}`}
+                              style={{
+                                width: '100%',
+                                marginTop: '10px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px',
+                                padding: '7px 10px',
+                                fontWeight: 700,
+                                fontSize: '0.8rem',
+                              }}
+                            >
+                              <Plus size={14} />
+                              <span>{inCartItem ? `Added (${inCartItem.quantity})` : 'Add to Bill'}</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                {/* RIGHT: Virtual Cart & Billing Summary */}
+                <div
+                  style={{
+                    position: 'sticky',
+                    top: '88px',
+                    background: '#FFFFFF',
+                    borderRadius: '16px',
+                    border: '1px solid #E5E7EB',
+                    boxShadow: '0 4px 18px rgba(0,0,0,0.06)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {/* Cart Header */}
+                  <div
+                    style={{
+                      padding: '16px 20px',
+                      borderBottom: '1px solid #E5E7EB',
+                      background: '#F9FAFB',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <ShoppingCart size={18} color="#15733E" />
+                      <span style={{ fontWeight: 800, fontSize: '0.96rem', color: '#1B2E23' }}>
+                        Virtual Cart ({billingCart.reduce((sum, it) => sum + it.quantity, 0)})
+                      </span>
+                    </div>
+                    {billingCart.length > 0 && (
+                      <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#15733E' }}>
+                        ₹{billingSubtotal.toLocaleString('en-IN')}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Cart Items List */}
+                  <div
+                    style={{
+                      padding: '16px 20px',
+                      maxHeight: '260px',
+                      overflowY: 'auto',
+                      borderBottom: '1px solid #E5E7EB',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px',
+                    }}
+                  >
+                    {billingCart.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '28px 12px', color: '#7A8B80' }}>
+                        <ShoppingCart size={32} color="#D1D5DB" style={{ margin: '0 auto 8px' }} />
+                        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#4B5563' }}>Virtual Cart is Empty</div>
+                        <div style={{ fontSize: '0.78rem', marginTop: '4px' }}>
+                          Click "+ Add to Bill" on any catalog item to add it to this bill.
+                        </div>
+                      </div>
+                    ) : (
+                      billingCart.map((item) => (
+                        <div
+                          key={item.id}
+                          style={{
+                            padding: '10px 12px',
+                            background: '#F9FAFB',
+                            borderRadius: '10px',
+                            border: '1px solid #F3F4F6',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                            <div style={{ flex: 1, minWidth: 0, paddingRight: '8px' }}>
+                              <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#1F2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {item.title}
+                              </div>
+                              <span style={{ fontSize: '0.72rem', color: '#6B7280' }}>Unit: {item.unit}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeFromBillingCart(item.id)}
+                              style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '2px' }}
+                              title="Remove item"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            {/* Quantity Controls */}
+                            <div style={{ display: 'flex', alignItems: 'center', background: '#FFFFFF', borderRadius: '6px', border: '1px solid #D1D5DB' }}>
+                              <button
+                                type="button"
+                                onClick={() => updateCartQty(item.id, -1)}
+                                style={{ padding: '4px 8px', background: 'none', border: 'none', cursor: 'pointer', color: '#374151' }}
+                              >
+                                <Minus size={12} />
+                              </button>
+                              <span style={{ fontSize: '0.84rem', fontWeight: 700, minWidth: '24px', textAlign: 'center' }}>
+                                {item.quantity}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => updateCartQty(item.id, 1)}
+                                style={{ padding: '4px 8px', background: 'none', border: 'none', cursor: 'pointer', color: '#374151' }}
+                              >
+                                <Plus size={12} />
+                              </button>
+                            </div>
+
+                            {/* Price Override Input */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              <span style={{ fontSize: '0.82rem', color: '#6B7280' }}>₹</span>
+                              <input
+                                type="number"
+                                value={item.price}
+                                onChange={(e) => updateCartPrice(item.id, e.target.value)}
+                                style={{
+                                  width: '74px',
+                                  padding: '4px 6px',
+                                  fontSize: '0.84rem',
+                                  fontWeight: 600,
+                                  borderRadius: '6px',
+                                  border: '1px solid #D1D5DB',
+                                  textAlign: 'right',
+                                }}
+                                title="Custom price per unit"
+                              />
+                            </div>
+
+                            {/* Line Total */}
+                            <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#15733E', minWidth: '70px', textAlign: 'right' }}>
+                              ₹{(item.price * item.quantity).toLocaleString('en-IN')}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Customer Information Panel */}
+                  <div style={{ padding: '16px 20px', borderBottom: '1px solid #E5E7EB', background: '#FFFFFF' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
+                      Customer & Billing Details
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div>
+                          <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '3px' }}>
+                            Customer Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={billingCustomer.name}
+                            onChange={(e) => setBillingCustomer({ ...billingCustomer, name: e.target.value })}
+                            placeholder="e.g. Gurpreet Singh"
+                            className="form-input"
+                            style={{ margin: 0, padding: '7px 10px', fontSize: '0.82rem' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '3px' }}>
+                            Phone / WhatsApp *
+                          </label>
+                          <input
+                            type="text"
+                            value={billingCustomer.phone}
+                            onChange={(e) => setBillingCustomer({ ...billingCustomer, phone: e.target.value })}
+                            placeholder="e.g. 9876543210"
+                            className="form-input"
+                            style={{ margin: 0, padding: '7px 10px', fontSize: '0.82rem' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '3px' }}>
+                          Delivery Address & City
+                        </label>
+                        <input
+                          type="text"
+                          value={billingCustomer.address}
+                          onChange={(e) => setBillingCustomer({ ...billingCustomer, address: e.target.value })}
+                          placeholder="e.g. Store Direct Sale / VPO Fatehabad"
+                          className="form-input"
+                          style={{ margin: 0, padding: '7px 10px', fontSize: '0.82rem' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div>
+                          <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '3px' }}>
+                            Payment Method
+                          </label>
+                          <select
+                            value={billingCustomer.paymentMethod}
+                            onChange={(e) => setBillingCustomer({ ...billingCustomer, paymentMethod: e.target.value })}
+                            className="form-select"
+                            style={{ margin: 0, padding: '7px 10px', fontSize: '0.82rem' }}
+                          >
+                            <option value="CASH">Cash in Hand / COD</option>
+                            <option value="UPI">UPI / QR Code</option>
+                            <option value="BANK_TRANSFER">Bank Transfer / NEFT</option>
+                            <option value="RAZORPAY">Card / Razorpay</option>
+                            <option value="CREDIT">Khata / Pay Later</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '3px' }}>
+                            Payment Status
+                          </label>
+                          <select
+                            value={billingCustomer.paymentStatus}
+                            onChange={(e) => setBillingCustomer({ ...billingCustomer, paymentStatus: e.target.value })}
+                            className="form-select"
+                            style={{ margin: 0, padding: '7px 10px', fontSize: '0.82rem' }}
+                          >
+                            <option value="PAID">PAID (Complete)</option>
+                            <option value="PENDING">PENDING (Payment Due)</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pricing Breakdown & Disount */}
+                  <div style={{ padding: '16px 20px', background: '#F9FAFB' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', color: '#4B5563', marginBottom: '6px' }}>
+                      <span>Items Subtotal:</span>
+                      <span style={{ fontWeight: 600 }}>₹{billingSubtotal.toLocaleString('en-IN')}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem', color: '#4B5563', marginBottom: '6px' }}>
+                      <span>Discount / Concession:</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <span>-₹</span>
+                        <input
+                          type="number"
+                          value={billingDiscount}
+                          onChange={(e) => setBillingDiscount(parseFloat(e.target.value) || 0)}
+                          style={{ width: '70px', padding: '3px 6px', fontSize: '0.82rem', borderRadius: '4px', border: '1px solid #D1D5DB', textAlign: 'right' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem', color: '#4B5563', marginBottom: '12px' }}>
+                      <span>Delivery / Freight:</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <span>+₹</span>
+                        <input
+                          type="number"
+                          value={billingDelivery}
+                          onChange={(e) => setBillingDelivery(parseFloat(e.target.value) || 0)}
+                          style={{ width: '70px', padding: '3px 6px', fontSize: '0.82rem', borderRadius: '4px', border: '1px solid #D1D5DB', textAlign: 'right' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: '10px', borderTop: '2px dashed #E5E7EB' }}>
+                      <span style={{ fontSize: '1rem', fontWeight: 800, color: '#1F2937' }}>Grand Total:</span>
+                      <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#15733E' }}>
+                        ₹{billingGrandTotal.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleCreateBill}
+                      disabled={generatingBill || billingCart.length === 0}
+                      className="btn btn-primary"
+                      style={{
+                        width: '100%',
+                        marginTop: '16px',
+                        padding: '13px',
+                        fontSize: '0.98rem',
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        boxShadow: '0 4px 14px rgba(21,115,62,0.3)',
+                      }}
+                    >
+                      {generatingBill ? (
+                        <>
+                          <RefreshCw size={18} className="spin" />
+                          <span>Generating Official Invoice...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Receipt size={18} />
+                          <span>Generate & Save Bill (₹{billingGrandTotal.toLocaleString('en-IN')})</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -3537,6 +4290,328 @@ export default function AdminPortalPage({ onNavigateHome }) {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================== */}
+      {/* OFFICIAL INVOICE RECEIPT MODAL (PRINT & WHATSAPP)   */}
+      {/* ==================================================== */}
+      {showInvoiceModal && generatedInvoice && (
+        <div className="modal-overlay" style={{ zIndex: 650 }}>
+          <div
+            className="modal-content"
+            style={{
+              maxWidth: '680px',
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: 0,
+              overflow: 'hidden',
+              borderRadius: '16px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header (No print) */}
+            <div
+              className="no-print"
+              style={{
+                padding: '16px 24px',
+                borderBottom: '1px solid #E5E7EB',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: '#F9FAFB',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle size={20} color="#15733E" />
+                <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1B2E23' }}>
+                  Bill Generated: #{generatedInvoice.orderNumber}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInvoiceModal(false)}
+                className="modal-close-btn"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Printable Invoice Container */}
+            <div
+              id="printable-invoice-container"
+              style={{
+                padding: '28px 32px',
+                overflowY: 'auto',
+                flex: 1,
+                background: '#FFFFFF',
+              }}
+            >
+              {/* Company & Bill Lockup */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #15733E', paddingBottom: '16px', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <img
+                    src="/assets/brand/sachi-kheti-emblem.jpg"
+                    alt="Emblem"
+                    style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover' }}
+                  />
+                  <div>
+                    <h2 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#15733E', margin: 0 }}>
+                      SACHI KHETI
+                    </h2>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151' }}>
+                      By Lakhwinder Farmer Producer Company (LFPC Ltd.)
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#6B7280', marginTop: '2px' }}>
+                      📍 VPO Fatehabad, Punjab/Haryana • 📞 +91 83602 53372
+                    </div>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#1F2937', letterSpacing: '0.5px' }}>
+                    TAX INVOICE
+                  </div>
+                  <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#15733E', marginTop: '2px' }}>
+                    #{generatedInvoice.orderNumber}
+                  </div>
+                  <div style={{ fontSize: '0.76rem', color: '#6B7280', marginTop: '2px' }}>
+                    Date: {new Date(generatedInvoice.date || Date.now()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Billed To / Payment Status */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px', padding: '14px', background: '#F9FAFB', borderRadius: '10px', marginBottom: '20px' }}>
+                <div>
+                  <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#6B7280', textTransform: 'uppercase' }}>
+                    BILLED TO:
+                  </div>
+                  <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#1F2937', marginTop: '3px' }}>
+                    {generatedInvoice.customerName}
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: '#4B5563', marginTop: '2px' }}>
+                    📞 {generatedInvoice.customerPhone}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#6B7280', marginTop: '2px' }}>
+                    📍 {generatedInvoice.address}, {generatedInvoice.city} {generatedInvoice.pincode}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#6B7280', textTransform: 'uppercase' }}>
+                    PAYMENT & STATUS:
+                  </div>
+                  <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#1F2937', marginTop: '3px' }}>
+                    Mode: {generatedInvoice.paymentMethod}
+                  </div>
+                  <div style={{ marginTop: '6px' }}>
+                    <span
+                      style={{
+                        fontSize: '0.76rem',
+                        fontWeight: 800,
+                        padding: '3px 9px',
+                        borderRadius: '20px',
+                        background: generatedInvoice.paymentStatus === 'PAID' ? '#EBF7EE' : '#FEF3C7',
+                        color: generatedInvoice.paymentStatus === 'PAID' ? '#065F46' : '#92400E',
+                        border: `1px solid ${generatedInvoice.paymentStatus === 'PAID' ? '#A7F3D0' : '#FDE68A'}`,
+                      }}
+                    >
+                      {generatedInvoice.paymentStatus === 'PAID' ? 'PAID IN FULL' : 'PAYMENT DUE'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Itemized Table */}
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #E5E7EB', background: '#F3F4F6' }}>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.78rem', color: '#4B5563' }}>#</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.78rem', color: '#4B5563' }}>Item Description</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '0.78rem', color: '#4B5563' }}>Qty</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '0.78rem', color: '#4B5563' }}>Rate</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '0.78rem', color: '#4B5563' }}>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(generatedInvoice.items || []).map((it, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid #F3F4F6' }}>
+                      <td style={{ padding: '9px 10px', fontSize: '0.82rem', color: '#6B7280' }}>{idx + 1}</td>
+                      <td style={{ padding: '9px 10px', fontSize: '0.86rem', fontWeight: 700, color: '#1F2937' }}>
+                        {it.title}
+                        {it.unit && <span style={{ fontSize: '0.74rem', color: '#6B7280', fontWeight: 400, marginLeft: '4px' }}>({it.unit})</span>}
+                      </td>
+                      <td style={{ padding: '9px 10px', fontSize: '0.84rem', textAlign: 'center', color: '#374151' }}>{it.quantity}</td>
+                      <td style={{ padding: '9px 10px', fontSize: '0.84rem', textAlign: 'right', color: '#374151' }}>₹{Number(it.price).toLocaleString('en-IN')}</td>
+                      <td style={{ padding: '9px 10px', fontSize: '0.86rem', fontWeight: 700, textAlign: 'right', color: '#15733E' }}>
+                        ₹{(it.price * it.quantity).toLocaleString('en-IN')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Totals Summary */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '24px' }}>
+                <div style={{ width: '260px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', color: '#4B5563' }}>
+                    <span>Subtotal:</span>
+                    <span>₹{Number(generatedInvoice.subtotal || generatedInvoice.totalAmount).toLocaleString('en-IN')}</span>
+                  </div>
+                  {generatedInvoice.discount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', color: '#DC2626' }}>
+                      <span>Discount / Concession:</span>
+                      <span>-₹{Number(generatedInvoice.discount).toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                  {generatedInvoice.delivery > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', color: '#4B5563' }}>
+                      <span>Delivery / Freight:</span>
+                      <span>+₹{Number(generatedInvoice.delivery).toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.15rem', fontWeight: 900, color: '#15733E', borderTop: '2px solid #E5E7EB', paddingTop: '8px' }}>
+                    <span>Total Amount:</span>
+                    <span>₹{Number(generatedInvoice.totalAmount).toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Signatory & Terms */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderTop: '1px solid #E5E7EB', paddingTop: '16px', fontSize: '0.74rem', color: '#6B7280' }}>
+                <div>
+                  <div>• Goods once sold are backed by genuine farmer collective quality assurance.</div>
+                  <div>• Computer-generated tax invoice issued by Lakhwinder FPC Ltd.</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ height: '32px' }}></div>
+                  <div style={{ borderTop: '1px solid #9CA3AF', paddingTop: '4px', fontWeight: 700, color: '#374151', minWidth: '130px' }}>
+                    Authorized Signatory
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Footer (No print) */}
+            <div
+              className="no-print"
+              style={{
+                padding: '14px 24px',
+                borderTop: '1px solid #E5E7EB',
+                background: '#F9FAFB',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => handleWhatsAppInvoice(generatedInvoice)}
+                className="btn btn-secondary"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#15803D', borderColor: '#BBF7D0', background: '#F0FDF4' }}
+              >
+                <Send size={15} />
+                <span>Send Bill via WhatsApp</span>
+              </button>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  type="button"
+                  onClick={handlePrintInvoice}
+                  className="btn btn-primary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Printer size={15} />
+                  <span>Print Tax Invoice</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowInvoiceModal(false)}
+                  className="btn btn-secondary"
+                >
+                  Close & New Bill
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================== */}
+      {/* CUSTOM AD-HOC LINE ITEM MODAL                        */}
+      {/* ==================================================== */}
+      {showCustomItemModal && (
+        <div className="modal-overlay" style={{ zIndex: 650 }}>
+          <div className="modal-content" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: '#1B2E23' }}>
+                Add Custom Line Item
+              </h3>
+              <button onClick={() => setShowCustomItemModal(false)} className="modal-close-btn" type="button">
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddCustomItem}>
+              <div className="form-group">
+                <label className="form-label">Item / Service Description *</label>
+                <input
+                  type="text"
+                  required
+                  value={customItemForm.title}
+                  onChange={(e) => setCustomItemForm({ ...customItemForm, title: e.target.value })}
+                  className="form-input"
+                  placeholder="e.g. Field Leveling Extra Hours or Bulk Packaging"
+                />
+              </div>
+
+              <div className="checkout-grid-2col">
+                <div className="form-group">
+                  <label className="form-label">Unit Specification</label>
+                  <input
+                    type="text"
+                    value={customItemForm.unit}
+                    onChange={(e) => setCustomItemForm({ ...customItemForm, unit: e.target.value })}
+                    className="form-input"
+                    placeholder="e.g. Hour, Acre, Bag, Service"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Unit Rate (₹) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={customItemForm.price}
+                    onChange={(e) => setCustomItemForm({ ...customItemForm, price: e.target.value })}
+                    className="form-input"
+                    placeholder="e.g. 500"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Quantity</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={customItemForm.quantity}
+                  onChange={(e) => setCustomItemForm({ ...customItemForm, quantity: e.target.value })}
+                  className="form-input"
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
+                <button type="button" onClick={() => setShowCustomItemModal(false)} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Add Item to Cart
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

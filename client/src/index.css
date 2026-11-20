@@ -4385,3 +4385,34 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==================================================== */
+/* PRINT MEDIA STYLES FOR OFFICIAL INVOICE RECEIPTS     */
+/* ==================================================== */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #printable-invoice-container,
+  #printable-invoice-container * {
+    visibility: visible !important;
+  }
+  #printable-invoice-container {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 24px !important;
+    background: #FFFFFF !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .no-print,
+  .modal-overlay,
+  .admin-topbar,
+  .admin-portal-sidebar {
+    background: none !important;
+    box-shadow: none !important;
+  }
+}
