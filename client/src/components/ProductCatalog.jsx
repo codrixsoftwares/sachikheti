@@ -102,10 +102,18 @@ export default function ProductCatalog({
 
   const handleQuickWhatsApp = (product, e) => {
     e.stopPropagation();
+    let typeNote = '';
+    try {
+      if (product.specs) {
+        const s = typeof product.specs === 'string' ? JSON.parse(product.specs) : product.specs;
+        if (s.isForRent && !s.isForSale) typeNote = ' (For Rent / Custom Hiring)';
+        else if (s.isForRent && s.isForSale) typeNote = ' (Available for Rent or Purchase)';
+      }
+    } catch (err) {}
     const msg = encodeURIComponent(
-      `Hello SachiKheti! I want to order:\n- *${product.title}*\n- Price: ₹${product.price.toLocaleString('en-IN')} / ${product.unit}\n\nPlease confirm availability and delivery to my address.`
+      `Hello SachiKheti! I want to inquire/order:\n- *${product.title}*${typeNote}\n- Price: ₹${product.price.toLocaleString('en-IN')} / ${product.unit}\n\nPlease confirm availability and details.`
     );
-    window.open(`https://wa.me/918295886832?text=${msg}`, '_blank');
+    window.open(`https://wa.me/918360253372?text=${msg}`, '_blank');
   };
 
   const handleAddToCart = (product, e) => {
@@ -217,29 +225,66 @@ export default function ProductCatalog({
           </div>
         ) : (
           <div className={`product-grid ${isHome ? 'home-4-grid' : ''}`}>
-            {displayedProducts.map((product) => (
-              <div
-                key={product.id}
-                className="product-card"
-                onClick={() => onOpenProductDetail(product)}
-              >
-                {/* Product Image Wrap */}
-                <div className="product-card-media">
-                  <img
-                    src={product.imageUrl}
-                    alt={product.title}
-                    className="product-card-img"
-                    loading="lazy"
-                  />
+            {displayedProducts.map((product) => {
+              let isRental = false;
+              let isBoth = false;
+              try {
+                if (product.specs) {
+                  const s = typeof product.specs === 'string' ? JSON.parse(product.specs) : product.specs;
+                  if (s.isForRent && s.isForSale) isBoth = true;
+                  else if (s.isForRent) isRental = true;
+                }
+              } catch (err) {}
 
-                  {product.featured && (
-                    <span className="product-card-tag badge-gold">Featured</span>
-                  )}
+              return (
+                <div
+                  key={product.id}
+                  className="product-card"
+                  onClick={() => onOpenProductDetail(product)}
+                >
+                  {/* Product Image Wrap */}
+                  <div className="product-card-media">
+                    <img
+                      src={product.imageUrl}
+                      alt={product.title}
+                      className="product-card-img"
+                      loading="lazy"
+                    />
 
-                  {!product.inStock && (
-                    <span className="product-card-tag badge-out-of-stock">Sold Out</span>
-                  )}
-                </div>
+                    {product.featured && (
+                      <span className="product-card-tag badge-gold">Featured</span>
+                    )}
+
+                    {isBoth && (
+                      <span
+                        className="product-card-tag"
+                        style={{
+                          background: '#0284C7',
+                          color: '#fff',
+                          left: product.featured ? '86px' : '10px',
+                        }}
+                      >
+                        Rent & Sale
+                      </span>
+                    )}
+
+                    {!isBoth && isRental && (
+                      <span
+                        className="product-card-tag"
+                        style={{
+                          background: '#7C3AED',
+                          color: '#fff',
+                          left: product.featured ? '86px' : '10px',
+                        }}
+                      >
+                        For Rent
+                      </span>
+                    )}
+
+                    {!product.inStock && (
+                      <span className="product-card-tag badge-out-of-stock">Sold Out</span>
+                    )}
+                  </div>
 
                 {/* Product Content */}
                 <div className="product-card-body">
@@ -283,7 +328,8 @@ export default function ProductCatalog({
                   </div>
                 </div>
               </div>
-            ))}
+            );
+          })}
           </div>
         )}
 

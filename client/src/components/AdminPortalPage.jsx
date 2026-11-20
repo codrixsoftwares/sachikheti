@@ -92,15 +92,22 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const [savingProduct, setSavingProduct] = useState(false);
   const [productForm, setProductForm] = useState({
     title: '',
+    titlePunjabi: '',
     categoryId: '',
     price: '',
-    unit: '1 Litre',
-    imageUrl: 'https://images.unsplash.com/photo-1627483262268-9c2b5b2834b5?auto=format&fit=crop&w=800&q=80',
+    unit: '1 kg',
+    imageUrl: '',
     description: '',
     inStock: true,
     stockCount: 50,
     featured: false,
     specs: '',
+    productType: 'produce', // 'produce' | 'machinery'
+    isForSale: true,
+    isForRent: false,
+    workingCapacity: '',
+    workingDuration: '',
+    machineType: '',
   });
 
   // Category Add / Edit Modal state
@@ -365,37 +372,74 @@ export default function AdminPortalPage({ onNavigateHome }) {
   // ==========================================
   // PRODUCT MANAGEMENT HANDLERS
   // ==========================================
-  const openAddProductModal = () => {
+  const openAddProductModal = (initialType = 'produce') => {
     setEditingProduct(null);
     setProductForm({
       title: '',
+      titlePunjabi: '',
       categoryId: categories[0]?.id || '',
       price: '',
-      unit: '1 Litre',
-      imageUrl: 'https://images.unsplash.com/photo-1627483262268-9c2b5b2834b5?auto=format&fit=crop&w=800&q=80',
+      unit: initialType === 'machinery' ? '1 Acre' : '1 kg',
+      imageUrl: '',
       description: '',
       inStock: true,
-      stockCount: 50,
+      stockCount: initialType === 'machinery' ? 1 : 50,
       featured: false,
       specs: '',
+      productType: initialType,
+      isForSale: true,
+      isForRent: initialType === 'machinery',
+      workingCapacity: initialType === 'machinery' ? '1 Acre' : '',
+      workingDuration: '',
+      machineType: '',
     });
+    setProductUploadStatus('');
     setShowProductModal(true);
   };
 
   const openEditProductModal = (product) => {
     setEditingProduct(product);
+    let parsedSpecs = {};
+    try {
+      if (product.specs) {
+        parsedSpecs = typeof product.specs === 'string' ? JSON.parse(product.specs) : product.specs;
+      }
+    } catch (e) {
+      parsedSpecs = {};
+    }
+
+    const isRental = Boolean(parsedSpecs.isForRent || parsedSpecs['Listing Type']?.includes('Rent'));
+    const isSale = parsedSpecs.isForSale !== undefined ? Boolean(parsedSpecs.isForSale) : true;
+    const isMachinery = Boolean(
+      isRental ||
+      parsedSpecs.machineType ||
+      parsedSpecs['Machine Type'] ||
+      parsedSpecs.workingCapacity ||
+      parsedSpecs['Working Capacity'] ||
+      product.unit?.includes('Acre') ||
+      product.unit?.includes('Hour')
+    );
+
     setProductForm({
-      title: product.title,
-      categoryId: product.categoryId,
-      price: product.price.toString(),
-      unit: product.unit,
-      imageUrl: product.imageUrl,
-      description: product.description,
-      inStock: product.inStock,
-      stockCount: product.stockCount,
-      featured: product.featured,
+      title: product.title || '',
+      titlePunjabi: product.titlePunjabi || product.title || '',
+      categoryId: product.categoryId || categories[0]?.id || '',
+      price: product.price !== undefined ? product.price.toString() : '',
+      unit: product.unit || '1 kg',
+      imageUrl: product.imageUrl || '',
+      description: product.description || '',
+      inStock: Boolean(product.inStock),
+      stockCount: product.stockCount !== undefined ? product.stockCount : 50,
+      featured: Boolean(product.featured),
       specs: product.specs || '',
+      productType: isMachinery ? 'machinery' : 'produce',
+      isForSale: isSale,
+      isForRent: isRental,
+      workingCapacity: parsedSpecs['Working Capacity'] || parsedSpecs.workingCapacity || '',
+      workingDuration: parsedSpecs['Working Duration / Availability'] || parsedSpecs['Working Duration'] || parsedSpecs['Availability'] || parsedSpecs.workingDuration || '',
+      machineType: parsedSpecs['Machine Type'] || parsedSpecs.machineType || '',
     });
+    setProductUploadStatus('');
     setShowProductModal(true);
   };
 
@@ -406,18 +450,53 @@ export default function AdminPortalPage({ onNavigateHome }) {
       const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
       const method = editingProduct ? 'PUT' : 'POST';
 
+      // Build structured specs object honoring rent/sale and machinery capacity
+      const specsObj = {};
+      if (productForm.isForRent && productForm.isForSale) {
+        specsObj['Listing Type'] = 'Available for Rent & Sale';
+      } else if (productForm.isForRent) {
+        specsObj['Listing Type'] = 'Available for Rent (Custom Hiring)';
+      } else if (productForm.isForSale) {
+        specsObj['Listing Type'] = 'Direct Sale';
+      }
+      specsObj.isForRent = Boolean(productForm.isForRent);
+      specsObj.isForSale = Boolean(productForm.isForSale);
+      specsObj.productType = productForm.productType;
+
+      if (productForm.workingCapacity && productForm.workingCapacity.trim()) {
+        specsObj['Working Capacity'] = productForm.workingCapacity.trim();
+      }
+      if (productForm.workingDuration && productForm.workingDuration.trim()) {
+        specsObj['Working Duration / Availability'] = productForm.workingDuration.trim();
+      }
+      if (productForm.machineType && productForm.machineType.trim()) {
+        specsObj['Machine Type'] = productForm.machineType.trim();
+      }
+
+      // Preserve any custom specs if present
+      if (typeof productForm.specs === 'string' && productForm.specs.trim()) {
+        try {
+          const custom = JSON.parse(productForm.specs);
+          Object.assign(specsObj, custom);
+        } catch (e) {
+          if (!specsObj['Notes']) specsObj['Notes'] = productForm.specs.trim();
+        }
+      }
+
       const payload = {
-        title: productForm.title,
-        titlePunjabi: productForm.title, // Graceful fallback for backend schema
+        title: productForm.title.trim(),
+        titlePunjabi: (productForm.titlePunjabi && productForm.titlePunjabi.trim())
+          ? productForm.titlePunjabi.trim()
+          : productForm.title.trim(),
         categoryId: productForm.categoryId,
         price: parseFloat(productForm.price),
-        unit: productForm.unit,
-        imageUrl: productForm.imageUrl,
-        description: productForm.description,
+        unit: productForm.unit.trim() || '1 kg',
+        imageUrl: productForm.imageUrl.trim() || 'https://images.unsplash.com/photo-1592982537447-7440770cbfc9?auto=format&fit=crop&w=800&q=80',
+        description: productForm.description.trim(),
         inStock: Boolean(productForm.inStock),
         stockCount: parseInt(productForm.stockCount, 10) || 0,
         featured: Boolean(productForm.featured),
-        specs: productForm.specs,
+        specs: JSON.stringify(specsObj),
       };
 
       const res = await fetch(url, {
@@ -431,7 +510,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
       const data = await res.json();
       if (data.success) {
         setShowProductModal(false);
-        setActionSuccess(editingProduct ? 'Product updated successfully!' : 'New product created and live in catalog!');
+        setActionSuccess(editingProduct ? 'Product updated successfully!' : 'New agricultural product created and live in catalog!');
         setTimeout(() => setActionSuccess(''), 4000);
         loadAllData();
       } else {
@@ -2057,62 +2136,338 @@ export default function AdminPortalPage({ onNavigateHome }) {
       {/* ==================================================== */}
       {showProductModal && (
         <div className="modal-overlay" style={{ zIndex: 600 }}>
-          <div className="modal-content" style={{ maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: '680px', maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div>
-                <h3 style={{ fontSize: '1.4rem', fontWeight: 800 }}>
-                  {editingProduct ? 'Edit Catalog Product' : 'Add New Agricultural Product'}
+                <h3 style={{ fontSize: '1.35rem', fontWeight: 800, margin: 0, color: '#1B2E23' }}>
+                  {editingProduct ? 'Edit Agricultural Product' : 'Add New Agricultural Product'}
                 </h3>
-                <p style={{ fontSize: '0.85rem', color: '#7A8B80' }}>
-                  Product will be visible on the store catalog immediately.
+                <p style={{ fontSize: '0.82rem', color: '#7A8B80', margin: '4px 0 0 0' }}>
+                  Configure farm produce, dairy, groceries, or agricultural machinery for direct sale or rental.
                 </p>
               </div>
-              <button onClick={() => setShowProductModal(false)} className="modal-close-btn">
+              <button onClick={() => setShowProductModal(false)} className="modal-close-btn" type="button">
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveProduct}>
-              <div className="form-group">
-                <label className="form-label">Product Name (English US) *</label>
-                <input
-                  type="text"
-                  required
-                  value={productForm.title}
-                  onChange={(e) => setProductForm({ ...productForm, title: e.target.value })}
-                  className="form-input"
-                  placeholder="e.g. Pure Vedic Bilona A2 Desi Cow Ghee"
-                />
-              </div>
+            {/* Product Type Quick Switcher */}
+            <div
+              style={{
+                display: 'flex',
+                gap: '8px',
+                marginBottom: '18px',
+                background: '#F1F5F2',
+                padding: '4px',
+                borderRadius: '10px',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setProductForm((prev) => ({
+                    ...prev,
+                    productType: 'produce',
+                    isForSale: true,
+                    isForRent: false,
+                    unit: prev.unit.includes('Acre') || prev.unit.includes('Hour') ? '1 kg' : prev.unit,
+                    stockCount: prev.stockCount === 1 ? 50 : prev.stockCount,
+                  }));
+                }}
+                style={{
+                  flex: 1,
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '0.84rem',
+                  cursor: 'pointer',
+                  background: productForm.productType === 'produce' ? '#15733E' : 'transparent',
+                  color: productForm.productType === 'produce' ? '#fff' : '#4B6354',
+                  boxShadow: productForm.productType === 'produce' ? '0 2px 6px rgba(21,115,62,0.25)' : 'none',
+                  transition: 'all 0.2s',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                }}
+              >
+                <span>🌾 Farm Produce & Dairy (Ghee, Sweets, Pulses, Spices, Honey)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setProductForm((prev) => ({
+                    ...prev,
+                    productType: 'machinery',
+                    isForRent: true,
+                    unit: prev.unit === '1 kg' || prev.unit === '500 ml' ? '1 Acre' : prev.unit,
+                    stockCount: prev.stockCount === 50 ? 1 : prev.stockCount,
+                    workingCapacity: prev.workingCapacity || '1 Acre',
+                  }));
+                }}
+                style={{
+                  flex: 1,
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '0.84rem',
+                  cursor: 'pointer',
+                  background: productForm.productType === 'machinery' ? '#15733E' : 'transparent',
+                  color: productForm.productType === 'machinery' ? '#fff' : '#4B6354',
+                  boxShadow: productForm.productType === 'machinery' ? '0 2px 6px rgba(21,115,62,0.25)' : 'none',
+                  transition: 'all 0.2s',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                }}
+              >
+                <span>🚜 Agricultural Machinery & Equipment (Rent / Sale)</span>
+              </button>
+            </div>
 
+            <form onSubmit={handleSaveProduct}>
+              {/* Product Titles: English & Punjabi */}
               <div className="checkout-grid-2col">
                 <div className="form-group">
-                  <label className="form-label">Category *</label>
-                  <select
-                    required
-                    value={productForm.categoryId}
-                    onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
-                    className="form-select"
-                  >
-                    <option value="">Select Category...</option>
-                    {categories.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Unit Specification *</label>
+                  <label className="form-label">Product / Equipment Name (English) *</label>
                   <input
                     type="text"
                     required
-                    value={productForm.unit}
-                    onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })}
+                    value={productForm.title}
+                    onChange={(e) => setProductForm({ ...productForm, title: e.target.value })}
                     className="form-input"
-                    placeholder="e.g. 1 Litre, 1 Kg, 50 Kg Bag"
+                    placeholder={
+                      productForm.productType === 'machinery'
+                        ? 'e.g. Basant Potato Digger or Rice Seeder'
+                        : 'e.g. Desi Ghee or Khoya Burfi'
+                    }
+                  />
+                </div>
+
+                <div className="form-group">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label className="form-label" style={{ margin: 0 }}>Product Name (Punjabi / ਪੰਜਾਬੀ)</label>
+                    {productForm.title && !productForm.titlePunjabi && (
+                      <button
+                        type="button"
+                        onClick={() => setProductForm({ ...productForm, titlePunjabi: productForm.title })}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#15733E',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Copy English
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={productForm.titlePunjabi}
+                    onChange={(e) => setProductForm({ ...productForm, titlePunjabi: e.target.value })}
+                    className="form-input font-gurmukhi"
+                    placeholder="e.g. ਦੇਸੀ ਘਿਓ / ਬਸੰਤ ਪੋਟੈਟੋ ਡਿੱਗਰ"
                   />
                 </div>
               </div>
 
+              {/* Category & Listing Options */}
+              <div className="form-group">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label className="form-label" style={{ margin: 0 }}>Catalog Category *</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCategoryModal(true);
+                      setEditingCategory(null);
+                      setCategoryForm({
+                        name: '',
+                        namePunjabi: '',
+                        slug: '',
+                        description: '',
+                        icon: 'package',
+                        imageUrl: '',
+                      });
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#15733E',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <Plus size={13} />
+                    <span>+ New Category</span>
+                  </button>
+                </div>
+                <select
+                  required
+                  value={productForm.categoryId}
+                  onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
+                  className="form-select"
+                >
+                  <option value="">Select Category...</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.namePunjabi ? `(${c.namePunjabi})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Listing Availability & Nature Checkboxes (As required by owner: Rent, Sale, In-Stock, Featured) */}
+              <div
+                style={{
+                  background: '#FAF9F3',
+                  border: '1px solid rgba(21, 115, 62, 0.2)',
+                  borderRadius: '10px',
+                  padding: '12px 16px',
+                  marginBottom: '16px',
+                }}
+              >
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1B2E23', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Availability & Operational Status
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+                    <input
+                      type="checkbox"
+                      checked={productForm.isForSale}
+                      onChange={(e) => setProductForm({ ...productForm, isForSale: e.target.checked })}
+                      style={{ width: '17px', height: '17px', accentColor: '#15733E' }}
+                    />
+                    <span>Available for Direct Sale</span>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: '#15733E' }}>
+                    <input
+                      type="checkbox"
+                      checked={productForm.isForRent}
+                      onChange={(e) => setProductForm({ ...productForm, isForRent: e.target.checked })}
+                      style={{ width: '17px', height: '17px', accentColor: '#15733E' }}
+                    />
+                    <span>Available for Rent / Custom Hiring</span>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+                    <input
+                      type="checkbox"
+                      checked={productForm.inStock}
+                      onChange={(e) => setProductForm({ ...productForm, inStock: e.target.checked })}
+                      style={{ width: '17px', height: '17px', accentColor: '#15733E' }}
+                    />
+                    <span>Mark as In-Stock / Available</span>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: '#B46F00' }}>
+                    <input
+                      type="checkbox"
+                      checked={productForm.featured}
+                      onChange={(e) => setProductForm({ ...productForm, featured: e.target.checked })}
+                      style={{ width: '17px', height: '17px', accentColor: '#B46F00' }}
+                    />
+                    <span>Mark as Featured Product</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Pack Size / Working Capacity / Unit Specification */}
+              <div className="form-group">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <label className="form-label" style={{ margin: 0 }}>
+                    Pack Size / Working Capacity / Unit *
+                  </label>
+                  <span style={{ fontSize: '0.72rem', color: '#7A8B80' }}>
+                    Pick from dropdown, click a chip, or type custom
+                  </span>
+                </div>
+
+                {/* Dropdown with all owner options */}
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setProductForm({ ...productForm, unit: e.target.value });
+                    }
+                  }}
+                  className="form-select"
+                  style={{ marginBottom: '8px', fontSize: '0.85rem' }}
+                >
+                  <option value="">-- Quick Select Pack Size or Working Capacity --</option>
+                  <optgroup label="Farm Produce & Dairy Pack Sizes">
+                    <option value="500 ml">500 ml (Desi Ghee, Natural Honey)</option>
+                    <option value="1 kg">1 kg (Khoya Burfi, Paneer, Khoya, Milkcake, Green Moong)</option>
+                    <option value="500 g">500 g (Natural Honey, Dal, etc.)</option>
+                    <option value="200 g">200 g (Haldi / Turmeric, Red Chilli Powder)</option>
+                    <option value="250 g">250 g</option>
+                    <option value="100 g">100 g</option>
+                    <option value="2 kg">2 kg</option>
+                    <option value="5 kg">5 kg</option>
+                    <option value="10 kg">10 kg</option>
+                    <option value="1 Litre">1 Litre</option>
+                  </optgroup>
+                  <optgroup label="Agricultural Machinery & Rental Capacities">
+                    <option value="1 Acre">1 Acre (Potato Digger, Rice Seeder, Potato Planter, Spray Boom, Rice Planter)</option>
+                    <option value="1 Hour">1 Hour (Laser Land Leveler, Harrow)</option>
+                    <option value="24 Hours">24 Hours (Massey Ferguson 9500 Tractor Hire)</option>
+                    <option value="Per Acre">Per Acre</option>
+                    <option value="Per Hour">Per Hour</option>
+                    <option value="Per Day">Per Day</option>
+                    <option value="Per Trip">Per Trip</option>
+                    <option value="1 Machine">1 Machine (Direct Sale)</option>
+                  </optgroup>
+                </select>
+
+                {/* Fast Clickable Chips */}
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                  {['500 ml', '1 kg', '500 g', '200 g', '1 Acre', '1 Hour', '24 Hours', 'Per Day'].map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => setProductForm({ ...productForm, unit: chip })}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        border: productForm.unit === chip ? '1px solid #15733E' : '1px solid #D1D5DB',
+                        background: productForm.unit === chip ? '#E8F5E9' : '#fff',
+                        color: productForm.unit === chip ? '#15733E' : '#374151',
+                        fontSize: '0.74rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Editable Input Field */}
+                <input
+                  type="text"
+                  required
+                  value={productForm.unit}
+                  onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })}
+                  className="form-input"
+                  placeholder="e.g. 500 ml, 1 kg, 1 Acre, 1 Hour, 24 Hours, Per Day"
+                />
+              </div>
+
+              {/* Price & Stock Quantity */}
               <div className="checkout-grid-2col">
                 <div className="form-group">
                   <label className="form-label">Price in ₹ (INR) *</label>
@@ -2123,21 +2478,82 @@ export default function AdminPortalPage({ onNavigateHome }) {
                     value={productForm.price}
                     onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
                     className="form-input"
-                    placeholder="e.g. 1450"
+                    placeholder="e.g. 600, 451, 2500, 900"
                   />
+                  {productForm.price && (
+                    <div style={{ fontSize: '0.76rem', color: '#15733E', marginTop: '4px', fontWeight: 600 }}>
+                      Rate: ₹{parseFloat(productForm.price).toLocaleString('en-IN')} / {productForm.unit || 'unit'}
+                      {productForm.isForRent && !productForm.isForSale && ' (Rental)'}
+                      {productForm.isForRent && productForm.isForSale && ' (Rent or Sale)'}
+                    </div>
+                  )}
                 </div>
+
                 <div className="form-group">
-                  <label className="form-label">Stock Quantity</label>
+                  <label className="form-label">Available Stock / Units</label>
                   <input
                     type="number"
                     value={productForm.stockCount}
                     onChange={(e) => setProductForm({ ...productForm, stockCount: e.target.value })}
                     className="form-input"
-                    placeholder="e.g. 50"
+                    placeholder="e.g. 50 (Produce) or 1 (Machinery)"
                   />
                 </div>
               </div>
 
+              {/* Machinery Specifications (Shown when Machinery is selected or item is For Rent) */}
+              {(productForm.productType === 'machinery' || productForm.isForRent) && (
+                <div
+                  style={{
+                    background: '#F0F9FF',
+                    border: '1px solid #BAE6FD',
+                    borderRadius: '10px',
+                    padding: '14px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', fontWeight: 700, color: '#0369A1', marginBottom: '10px' }}>
+                    <span>🚜 Machinery Specifications & Rental Terms</span>
+                  </div>
+
+                  <div className="checkout-grid-2col" style={{ marginBottom: '10px' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.78rem' }}>Working Capacity</label>
+                      <input
+                        type="text"
+                        value={productForm.workingCapacity}
+                        onChange={(e) => setProductForm({ ...productForm, workingCapacity: e.target.value })}
+                        className="form-input"
+                        placeholder="e.g. 1 Acre, 2 Acres, Per Acre"
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.78rem' }}>Working Duration / Availability</label>
+                      <input
+                        type="text"
+                        value={productForm.workingDuration}
+                        onChange={(e) => setProductForm({ ...productForm, workingDuration: e.target.value })}
+                        className="form-input"
+                        placeholder="e.g. 1 Hour, 24 Hours, Full Day"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem' }}>Machine Type / Tractor Compatibility</label>
+                    <input
+                      type="text"
+                      value={productForm.machineType}
+                      onChange={(e) => setProductForm({ ...productForm, machineType: e.target.value })}
+                      className="form-input"
+                      placeholder="e.g. Tractor-Operated, Laser-Guided, Tractor-Mounted, 50+ HP Tractor"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Product Image & Supabase Storage */}
               <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>Product Image *</span>
@@ -2229,6 +2645,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                 />
               </div>
 
+              {/* Product Description */}
               <div className="form-group">
                 <label className="form-label">Product Description</label>
                 <textarea
@@ -2236,33 +2653,16 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   value={productForm.description}
                   onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
                   className="form-textarea"
-                  placeholder="Detailed description of the product, farm origin, purity certifications..."
+                  placeholder={
+                    productForm.productType === 'machinery'
+                      ? 'e.g. Tractor-operated potato digging and harvesting machine with high efficiency and uniform field operations.'
+                      : 'e.g. Pure, rich and aromatic desi ghee with a natural golden colour. Perfect for traditional cooking...'
+                  }
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '24px', margin: '14px 0 20px', flexWrap: 'wrap' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600 }}>
-                  <input
-                    type="checkbox"
-                    checked={productForm.inStock}
-                    onChange={(e) => setProductForm({ ...productForm, inStock: e.target.checked })}
-                    style={{ width: '18px', height: '18px' }}
-                  />
-                  <span>Mark as In-Stock</span>
-                </label>
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600 }}>
-                  <input
-                    type="checkbox"
-                    checked={productForm.featured}
-                    onChange={(e) => setProductForm({ ...productForm, featured: e.target.checked })}
-                    style={{ width: '18px', height: '18px' }}
-                  />
-                  <span>Mark as Featured Product</span>
-                </label>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
                 <button
                   type="button"
                   onClick={() => setShowProductModal(false)}
