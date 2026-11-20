@@ -14,6 +14,9 @@ import paymentRouter from './routes/payment.js';
 import bannersRouter from './routes/banners.js';
 import uploadRouter from './routes/upload.js';
 import metricsRouter from './routes/metrics.js';
+import whatsappRouter from './routes/whatsapp.js';
+import settingsRouter from './routes/settings.js';
+import { setWhatsAppIO } from './lib/whatsapp.js';
 
 dotenv.config();
 
@@ -36,8 +39,9 @@ const io = new SocketIOServer(server, {
   pingInterval: 25000,
 });
 
-// Provide socket.io instance to all Express routes
+// Provide socket.io instance to all Express routes & services
 app.set('io', io);
+setWhatsAppIO(io);
 
 io.on('connection', (socket) => {
   // Client connected
@@ -67,6 +71,8 @@ app.use('/api/payment/razorpay', paymentRouter);
 app.use('/api/banners', bannersRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/admin/metrics', metricsRouter);
+app.use('/api/whatsapp', whatsappRouter);
+app.use('/api/settings', settingsRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

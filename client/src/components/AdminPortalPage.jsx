@@ -37,7 +37,14 @@ import {
   CreditCard,
   FileText,
   Tag,
-  User
+  User,
+  Settings,
+  Store,
+  MessageSquare,
+  Palette,
+  QrCode,
+  Share2,
+  CheckSquare
 } from 'lucide-react';
 import {
   getSupabaseConfig,
@@ -112,6 +119,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const [billingDelivery, setBillingDelivery] = useState(0);
   const [billingSearch, setBillingSearch] = useState('');
   const [billingCategoryFilter, setBillingCategoryFilter] = useState('all');
+  const [billingListingFilter, setBillingListingFilter] = useState('all'); // 'all', 'sale', 'rent', 'featured'
   const [generatingBill, setGeneratingBill] = useState(false);
   const [generatedInvoice, setGeneratedInvoice] = useState(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -123,6 +131,31 @@ export default function AdminPortalPage({ onNavigateHome }) {
     quantity: 1,
     unit: 'Unit',
   });
+
+  // Settings & WhatsApp Baileys Integration state
+  const [settingsSubTab, setSettingsSubTab] = useState('ribbon'); // 'ribbon', 'whatsapp', 'bill'
+  const [whatsappStatus, setWhatsappStatus] = useState({ status: 'DISCONNECTED', qr: null, user: null });
+  const [loadingWhatsApp, setLoadingWhatsApp] = useState(false);
+  const [whatsappTestPhone, setWhatsappTestPhone] = useState('');
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
+
+  // Customized Bill Design state
+  const [billDesign, setBillDesign] = useState({
+    companyName: 'ਸੱਚੀ ਖੇਤੀ | SachiKheti (LFPC Ltd.)',
+    tagline: 'Direct Farmer Prosperity • Certified Natural Produce & Farm Machinery',
+    gstin: 'FSSAI: 20822005001234 | GSTIN: 06AABCL1234E1Z5',
+    address: 'VPO Bhirdana, District Fatehabad, Haryana - 125050',
+    phone: '+91 8360253372',
+    email: 'support@sachikheti.com',
+    billTitle: 'TAX INVOICE / CASH MEMO',
+    accentColor: '#15733E',
+    themeName: 'forest',
+    showLogo: true,
+    showSignature: true,
+    termsNotes: '1. Certified direct farm produce & agricultural machinery custom hiring.\n2. Goods once delivered are verified fresh.\n3. Thank you for supporting indigenous farmers!',
+    authorizedSignatoryTitle: 'Authorized Store Manager (LFPC Ltd.)'
+  });
+  const [savingBillDesign, setSavingBillDesign] = useState(false);
 
   // Product Add / Edit Modal state
   const [showProductModal, setShowProductModal] = useState(false);
@@ -213,12 +246,14 @@ export default function AdminPortalPage({ onNavigateHome }) {
       setLoadingData(true);
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [ordersRes, productsRes, categoriesRes, bannersRes, metricsRes] = await Promise.all([
+      const [ordersRes, productsRes, categoriesRes, bannersRes, metricsRes, waRes, billDesignRes] = await Promise.all([
         fetch('/api/orders', { headers }).then(r => r.json()).catch(() => ({ data: [] })),
         fetch('/api/products').then(r => r.json()).catch(() => ({ data: [] })),
         fetch('/api/categories').then(r => r.json()).catch(() => ({ data: [] })),
         fetch('/api/banners').then(r => r.json()).catch(() => ({ data: [] })),
         fetch('/api/admin/metrics', { headers }).then(r => r.json()).catch(() => null),
+        fetch('/api/whatsapp/status').then(r => r.json()).catch(() => null),
+        fetch('/api/settings/bill-design').then(r => r.json()).catch(() => null),
       ]);
 
       if (ordersRes.success) setOrders(ordersRes.data || []);
@@ -229,6 +264,12 @@ export default function AdminPortalPage({ onNavigateHome }) {
       }
       if (metricsRes?.success && metricsRes.data) {
         setServerMetrics(metricsRes.data);
+      }
+      if (waRes?.success) {
+        setWhatsappStatus(waRes);
+      }
+      if (billDesignRes?.success && billDesignRes.data) {
+        setBillDesign(prev => ({ ...prev, ...billDesignRes.data }));
       }
     } catch (err) {
       console.error('Error refreshing admin data:', err);
@@ -290,12 +331,26 @@ export default function AdminPortalPage({ onNavigateHome }) {
       loadAllData();
     };
 
+    const handleWhatsAppRealtime = (waData) => {
+      if (waData) {
+        setWhatsappStatus(waData);
+      }
+    };
+
+    const handleBillDesignRealtime = (newDesign) => {
+      if (newDesign) {
+        setBillDesign(prev => ({ ...prev, ...newDesign }));
+      }
+    };
+
     socket.on('metrics:updated', handleMetricsUpdate);
     socket.on('orders:updated', handleOrderRealtime);
     socket.on('categories:updated', handleGenericRefresh);
     socket.on('catalogs:updated', handleGenericRefresh);
     socket.on('products:updated', handleGenericRefresh);
     socket.on('banners:updated', handleGenericRefresh);
+    socket.on('whatsapp:status', handleWhatsAppRealtime);
+    socket.on('settings:bill-design-updated', handleBillDesignRealtime);
 
     return () => {
       socket.off('connect', onConnect);
@@ -306,6 +361,8 @@ export default function AdminPortalPage({ onNavigateHome }) {
       socket.off('catalogs:updated', handleGenericRefresh);
       socket.off('products:updated', handleGenericRefresh);
       socket.off('banners:updated', handleGenericRefresh);
+      socket.off('whatsapp:status', handleWhatsAppRealtime);
+      socket.off('settings:bill-design-updated', handleBillDesignRealtime);
     };
   }, [token]);
 
@@ -842,6 +899,52 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const billingSubtotal = billingCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const billingGrandTotal = Math.max(0, billingSubtotal - Number(billingDiscount || 0) + Number(billingDelivery || 0));
 
+  const buildCurrentVirtualInvoice = () => {
+    const invNumber = `SK-BILL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    return {
+      orderNumber: invNumber,
+      customerName: billingCustomer.name.trim() || 'Direct Store Customer',
+      customerPhone: billingCustomer.phone.trim() || '8360253372',
+      address: billingCustomer.address.trim() || 'Store Direct / Local Delivery',
+      city: billingCustomer.city.trim() || 'Fatehabad',
+      pincode: billingCustomer.pincode.trim() || '125050',
+      items: billingCart.map((i) => ({
+        id: i.id,
+        title: i.title,
+        price: i.price,
+        quantity: i.quantity,
+        unit: i.unit,
+        subtotal: i.price * i.quantity,
+      })),
+      totalAmount: billingGrandTotal,
+      subtotal: billingSubtotal,
+      discount: Number(billingDiscount || 0),
+      delivery: Number(billingDelivery || 0),
+      paymentMethod: billingCustomer.paymentMethod,
+      paymentStatus: billingCustomer.paymentStatus,
+      date: new Date().toISOString(),
+    };
+  };
+
+  const handleDirectPrintVirtualBill = () => {
+    if (billingCart.length === 0) {
+      alert('Virtual cart is empty! Please add products from the catalog first.');
+      return;
+    }
+    const inv = buildCurrentVirtualInvoice();
+    setGeneratedInvoice(inv);
+    setShowInvoiceModal(true);
+  };
+
+  const handleDirectWhatsAppVirtualBill = () => {
+    if (billingCart.length === 0) {
+      alert('Virtual cart is empty! Please add products from the catalog first.');
+      return;
+    }
+    const inv = buildCurrentVirtualInvoice();
+    handleWhatsAppInvoice(inv);
+  };
+
   const handleCreateBill = async () => {
     if (billingCart.length === 0) {
       alert('Please add at least one item to the virtual cart before generating a bill.');
@@ -923,7 +1026,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
     window.print();
   };
 
-  const handleWhatsAppInvoice = (inv) => {
+  const handleWhatsAppInvoice = async (inv) => {
     if (!inv) return;
     const phone = (inv.customerPhone || '8360253372').replace(/[^0-9]/g, '');
     const cleanPhone = phone.startsWith('91') ? phone : `91${phone}`;
@@ -934,8 +1037,9 @@ export default function AdminPortalPage({ onNavigateHome }) {
       )
       .join('\n');
 
-    const msg = encodeURIComponent(
-      `🌾 *SACHI KHETI (LFPC) - OFFICIAL TAX INVOICE* 🌾\n` +
+    const rawMessage =
+      `🌾 *${billDesign.companyName.toUpperCase()}* 🌾\n` +
+      `*${billDesign.billTitle}*\n` +
       `----------------------------------------\n` +
       `*Bill No:* ${inv.orderNumber}\n` +
       `*Date:* ${new Date(inv.date || Date.now()).toLocaleDateString('en-IN')}\n` +
@@ -953,13 +1057,145 @@ export default function AdminPortalPage({ onNavigateHome }) {
       `*Payment Mode:* ${inv.paymentMethod}\n` +
       `*Payment Status:* ${inv.paymentStatus === 'PAID' ? 'PAID ✅' : 'DUE / PENDING ⏳'}\n` +
       `----------------------------------------\n` +
-      `Thank you for supporting *SachiKheti*!\n` +
-      `Direct Farmer Prosperity • LFPC Ltd.\n` +
-      `📍 Fatehabad, Punjab/Haryana\n` +
-      `📞 +91 83602 53372`
-    );
+      `${billDesign.tagline}\n` +
+      `📍 ${billDesign.address}\n` +
+      `📞 ${billDesign.phone}`;
 
+    // 1. If WhatsApp Baileys is active and connected, send directly via Baileys API!
+    if (whatsappStatus?.status === 'CONNECTED') {
+      try {
+        const res = await fetch('/api/whatsapp/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ phone: cleanPhone, message: rawMessage })
+        });
+        const data = await res.json();
+        if (data.success) {
+          setActionSuccess(`✓ Official Bill #${inv.orderNumber} sent directly to farmer WhatsApp (+${cleanPhone}) via Baileys!`);
+          setTimeout(() => setActionSuccess(''), 5000);
+          return;
+        }
+      } catch (err) {
+        console.warn('Baileys automated delivery fallback:', err.message);
+      }
+    }
+
+    // 2. Direct WhatsApp Web / App link fallback
+    const msg = encodeURIComponent(rawMessage);
     window.open(`https://wa.me/${cleanPhone}?text=${msg}`, '_blank');
+  };
+
+  // ==========================================
+  // WHATSAPP BAILEYS CONNECTION HANDLERS
+  // ==========================================
+  const handleStartWhatsApp = async (forceNew = false) => {
+    try {
+      setLoadingWhatsApp(true);
+      const res = await fetch('/api/whatsapp/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ forceNew })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWhatsappStatus(data);
+        setActionSuccess('WhatsApp session initialized. Scan QR code if displayed.');
+        setTimeout(() => setActionSuccess(''), 4000);
+      } else {
+        alert(data.message || 'Failed to start WhatsApp');
+      }
+    } catch (err) {
+      alert('Error initializing WhatsApp session: ' + err.message);
+    } finally {
+      setLoadingWhatsApp(false);
+    }
+  };
+
+  const handleDisconnectWhatsApp = async () => {
+    if (!window.confirm('Are you sure you want to disconnect your WhatsApp Baileys session? You will need to scan QR code again.')) return;
+    try {
+      setLoadingWhatsApp(true);
+      const res = await fetch('/api/whatsapp/disconnect', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWhatsappStatus({ status: 'DISCONNECTED', qr: null, user: null });
+        setActionSuccess('WhatsApp Baileys session disconnected.');
+        setTimeout(() => setActionSuccess(''), 4000);
+      }
+    } catch (err) {
+      alert('Error disconnecting WhatsApp: ' + err.message);
+    } finally {
+      setLoadingWhatsApp(false);
+    }
+  };
+
+  const handleSendTestWhatsApp = async (e) => {
+    e.preventDefault();
+    if (!whatsappTestPhone) {
+      alert('Please enter a test phone number (e.g. 9876543210)');
+      return;
+    }
+    try {
+      setSendingWhatsApp(true);
+      const res = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          phone: whatsappTestPhone,
+          message: `🌾 *${billDesign.companyName}*: Baileys WhatsApp connection verified successfully at ${new Date().toLocaleTimeString()}! Ready to dispatch virtual bills & invoices.`
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActionSuccess(`✓ Test message sent successfully via Baileys to ${whatsappTestPhone}!`);
+        setTimeout(() => setActionSuccess(''), 5000);
+      } else {
+        alert(data.message || 'Failed to send test message');
+      }
+    } catch (err) {
+      alert('Error sending test message: ' + err.message);
+    } finally {
+      setSendingWhatsApp(false);
+    }
+  };
+
+  const handleSaveBillDesign = async (e) => {
+    e.preventDefault();
+    setSavingBillDesign(true);
+    try {
+      const res = await fetch('/api/settings/bill-design', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(billDesign)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBillDesign(data.data);
+        setActionSuccess('✓ Customized Bill Design template saved successfully!');
+        setTimeout(() => setActionSuccess(''), 4000);
+      } else {
+        alert(data.message || 'Failed to save bill design');
+      }
+    } catch (err) {
+      alert('Error saving bill design: ' + err.message);
+    } finally {
+      setSavingBillDesign(false);
+    }
   };
 
   // ==========================================
@@ -1561,11 +1797,11 @@ export default function AdminPortalPage({ onNavigateHome }) {
             </button>
 
             <button
-              onClick={() => { setActiveTab('billing'); setSidebarOpen(false); }}
-              className={`admin-nav-item ${activeTab === 'billing' ? 'active' : ''}`}
+              onClick={() => { setActiveTab('customer-store'); setSidebarOpen(false); }}
+              className={`admin-nav-item ${activeTab === 'customer-store' || activeTab === 'billing' ? 'active' : ''}`}
             >
-              <Receipt size={18} />
-              <span>Custom Billing & POS</span>
+              <Store size={18} />
+              <span>Customer Store & POS</span>
               {billingCart.length > 0 && (
                 <span className="badge badge-gold" style={{ fontSize: '0.72rem', padding: '2px 7px', marginLeft: 'auto' }}>
                   {billingCart.length}
@@ -1584,7 +1820,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
               )}
             </button>
 
-            <div className="admin-nav-section-title" style={{ marginTop: '16px' }}>Catalog & Store</div>
+            <div className="admin-nav-section-title" style={{ marginTop: '16px' }}>Catalog Management</div>
 
             <button
               onClick={() => { setActiveTab('products'); setSidebarOpen(false); }}
@@ -1604,22 +1840,27 @@ export default function AdminPortalPage({ onNavigateHome }) {
               <span className="admin-nav-badge">{categories.length}</span>
             </button>
 
-            <button
-              onClick={() => { setActiveTab('banner'); setSidebarOpen(false); }}
-              className={`admin-nav-item ${activeTab === 'banner' ? 'active' : ''}`}
-            >
-              <Megaphone size={18} />
-              <span>Announcement Ribbon</span>
-            </button>
+            <div className="admin-nav-section-title" style={{ marginTop: '16px' }}>Administration</div>
 
             <button
-              onClick={onNavigateHome}
-              className="admin-nav-item"
-              style={{ color: '#15733E', marginTop: '6px' }}
-              title="View Customer Storefront"
+              onClick={() => { setActiveTab('settings'); setSidebarOpen(false); }}
+              className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
             >
-              <ExternalLink size={18} />
-              <span>Customer Store</span>
+              <Settings size={18} />
+              <span>Settings</span>
+              {whatsappStatus?.status === 'CONNECTED' && (
+                <span
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: '#10B981',
+                    marginLeft: 'auto',
+                    boxShadow: '0 0 6px #10B981'
+                  }}
+                  title="WhatsApp Connected via Baileys"
+                />
+              )}
             </button>
           </div>
 
@@ -2057,18 +2298,18 @@ export default function AdminPortalPage({ onNavigateHome }) {
           )}
 
           {/* ==================================================== */}
-          {/* TAB: CUSTOM BILLING & VIRTUAL CART TERMINAL         */}
+          {/* TAB: CUSTOMER STORE & VIRTUAL BILL POS TERMINAL     */}
           {/* ==================================================== */}
-          {activeTab === 'billing' && (
+          {(activeTab === 'customer-store' || activeTab === 'billing') && (
             <div className="admin-tab-view">
               <div className="admin-view-header">
                 <div>
                   <h1 className="admin-view-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Receipt size={28} color="#15733E" />
-                    <span>Custom Billing Terminal & POS</span>
+                    <Store size={28} color="#15733E" />
+                    <span>Customer Store & Virtual POS</span>
                   </h1>
                   <p className="admin-view-sub">
-                    Create customized in-store bills, wholesale quotes, or machinery rental bookings with a live virtual cart, price adjustments, and printable official invoices.
+                    Browse the complete store catalogs, filter direct sale produce vs. rental machinery, and assemble a live virtual bill with one-click print/download and direct WhatsApp dispatch.
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -2095,18 +2336,18 @@ export default function AdminPortalPage({ onNavigateHome }) {
                 </div>
               </div>
 
-              {/* Responsive 2-Column Split: Product Catalog (Left) + Virtual Cart & Billing (Right) */}
+              {/* Responsive 2-Column Split: Customer Store Catalogs (Left) + Live Virtual Bill (Right) */}
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'minmax(0, 1.35fr) minmax(360px, 440px)',
+                  gridTemplateColumns: 'minmax(0, 1.35fr) minmax(370px, 450px)',
                   gap: '24px',
                   alignItems: 'start',
                 }}
               >
-                {/* LEFT: Product Catalog Picker */}
+                {/* LEFT: Customer Store Catalog Browser */}
                 <div>
-                  {/* Search and Category Filter Bar */}
+                  {/* Search, Listing Filter & Category Chips */}
                   <div
                     style={{
                       background: '#FFFFFF',
@@ -2117,6 +2358,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                       boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                     }}
                   >
+                    {/* Search Input */}
                     <div style={{ position: 'relative', marginBottom: '12px' }}>
                       <Search
                         size={17}
@@ -2126,10 +2368,46 @@ export default function AdminPortalPage({ onNavigateHome }) {
                         type="text"
                         value={billingSearch}
                         onChange={(e) => setBillingSearch(e.target.value)}
-                        placeholder="Search product by title, category, unit, machinery..."
+                        placeholder="Search product by title, Punjabi name, unit, machinery, category..."
                         className="form-input"
                         style={{ paddingLeft: '38px', margin: 0 }}
                       />
+                    </div>
+
+                    {/* Listing Type Filter Pills (Direct Sale, Rent, Featured) */}
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => setBillingListingFilter('all')}
+                        className={`btn btn-sm ${billingListingFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '0.8rem', padding: '5px 12px' }}
+                      >
+                        All Items ({products.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBillingListingFilter('sale')}
+                        className={`btn btn-sm ${billingListingFilter === 'sale' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '0.8rem', padding: '5px 12px' }}
+                      >
+                        🌾 Direct Sale (Produce/Dairy)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBillingListingFilter('rent')}
+                        className={`btn btn-sm ${billingListingFilter === 'rent' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '0.8rem', padding: '5px 12px' }}
+                      >
+                        🚜 Available for Rent (Machinery)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBillingListingFilter('featured')}
+                        className={`btn btn-sm ${billingListingFilter === 'featured' ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '0.8rem', padding: '5px 12px' }}
+                      >
+                        ⭐ Featured
+                      </button>
                     </div>
 
                     {/* Category Filter Pills */}
@@ -2140,7 +2418,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                         className={`btn btn-sm ${billingCategoryFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
                         style={{ fontSize: '0.78rem', padding: '4px 12px', whiteSpace: 'nowrap' }}
                       >
-                        All Categories ({products.length})
+                        All Categories
                       </button>
                       {categories.map((c) => (
                         <button
@@ -2160,7 +2438,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   <div
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
                       gap: '14px',
                     }}
                   >
@@ -2172,103 +2450,203 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           (p.titlePunjabi && p.titlePunjabi.toLowerCase().includes(billingSearch.toLowerCase())) ||
                           (p.description && p.description.toLowerCase().includes(billingSearch.toLowerCase()));
                         const matchesCat = billingCategoryFilter === 'all' || p.categoryId === billingCategoryFilter;
-                        return matchesSearch && matchesCat;
+
+                        const listingType = getProductListingType(p);
+                        let matchesListing = true;
+                        if (billingListingFilter === 'featured') {
+                          matchesListing = Boolean(p.featured);
+                        } else if (billingListingFilter === 'rent') {
+                          matchesListing = listingType === 'rent' || listingType === 'both';
+                        } else if (billingListingFilter === 'sale') {
+                          matchesListing = listingType === 'sale' || listingType === 'both';
+                        }
+
+                        return matchesSearch && matchesCat && matchesListing;
                       })
                       .map((p) => {
                         const inCartItem = billingCart.find((it) => it.id === p.id);
+                        const listingType = getProductListingType(p);
+
                         return (
                           <div
                             key={p.id}
                             style={{
                               background: '#FFFFFF',
                               borderRadius: '12px',
-                              border: inCartItem ? '2px solid #15733E' : '1px solid #E5E7EB',
+                              border: inCartItem ? `2px solid ${billDesign.accentColor}` : '1px solid #E5E7EB',
                               padding: '14px',
                               display: 'flex',
                               flexDirection: 'column',
-                              boxShadow: inCartItem ? '0 4px 12px rgba(21,115,62,0.12)' : '0 1px 3px rgba(0,0,0,0.04)',
+                              boxShadow: inCartItem ? '0 4px 12px rgba(21,115,62,0.14)' : '0 1px 3px rgba(0,0,0,0.04)',
                               transition: 'all 0.2s ease',
                               position: 'relative',
                             }}
                           >
-                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+                            {/* Product Image & Badges */}
+                            <div style={{ position: 'relative', marginBottom: '10px' }}>
                               <img
                                 src={p.imageUrl}
                                 alt={p.title}
-                                style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }}
+                                style={{ width: '100%', height: '120px', borderRadius: '8px', objectFit: 'cover' }}
                               />
-                              <div style={{ minWidth: 0, flex: 1 }}>
-                                <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1B2E23', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {p.title}
-                                </div>
-                                {p.titlePunjabi && p.titlePunjabi !== p.title && (
-                                  <div style={{ fontSize: '0.74rem', color: '#15733E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {p.titlePunjabi}
-                                  </div>
+                              {/* Badges Overlay */}
+                              <div style={{ position: 'absolute', top: '6px', left: '6px', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                {p.featured && (
+                                  <span style={{ fontSize: '0.66rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A' }}>
+                                    ★ FEATURED
+                                  </span>
                                 )}
-                                <span style={{ fontSize: '0.72rem', color: '#7A8B80' }}>
-                                  {p.category?.name || 'Produce'}
-                                </span>
+                                {listingType === 'both' ? (
+                                  <span style={{ fontSize: '0.66rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}>
+                                    RENT & SALE
+                                  </span>
+                                ) : listingType === 'rent' ? (
+                                  <span style={{ fontSize: '0.66rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', background: '#F3E8FF', color: '#6B21A8', border: '1px solid #E9D5FF' }}>
+                                    🚜 FOR RENT
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: '0.66rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', background: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0' }}>
+                                    DIRECT SALE
+                                  </span>
+                                )}
                               </div>
                             </div>
 
+                            {/* Titles */}
+                            <div style={{ marginBottom: '8px' }}>
+                              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#1B2E23', lineHeight: 1.25 }}>
+                                {p.title}
+                              </div>
+                              {p.titlePunjabi && p.titlePunjabi !== p.title && (
+                                <div style={{ fontSize: '0.76rem', color: '#15733E', marginTop: '2px' }}>
+                                  {p.titlePunjabi}
+                                </div>
+                              )}
+                              <div style={{ fontSize: '0.72rem', color: '#7A8B80', marginTop: '3px' }}>
+                                {p.category?.name || 'Produce'}
+                              </div>
+                            </div>
+
+                            {/* Pricing & Stock */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #F3F4F6' }}>
                               <div>
-                                <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#15733E' }}>
+                                <span style={{ fontSize: '1.1rem', fontWeight: 900, color: '#15733E' }}>
                                   ₹{p.price.toLocaleString('en-IN')}
                                 </span>
-                                <span style={{ fontSize: '0.74rem', color: '#7A8B80', marginLeft: '3px' }}>
+                                <span style={{ fontSize: '0.72rem', color: '#7A8B80', marginLeft: '3px' }}>
                                   / {p.unit}
                                 </span>
                               </div>
                               <span style={{ fontSize: '0.7rem', color: p.inStock ? '#065F46' : '#DC2626', fontWeight: 600 }}>
-                                {p.inStock ? `Stock: ${p.stockCount}` : 'Out of stock'}
+                                {p.inStock ? `In Stock (${p.stockCount})` : 'Out of stock'}
                               </span>
                             </div>
 
-                            <button
-                              type="button"
-                              onClick={() => addToBillingCart(p)}
-                              className={`btn btn-sm ${inCartItem ? 'btn-primary' : 'btn-secondary'}`}
-                              style={{
-                                width: '100%',
-                                marginTop: '10px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '6px',
-                                padding: '7px 10px',
-                                fontWeight: 700,
-                                fontSize: '0.8rem',
-                              }}
-                            >
-                              <Plus size={14} />
-                              <span>{inCartItem ? `Added (${inCartItem.quantity})` : 'Add to Bill'}</span>
-                            </button>
+                            {/* Interactive Add to Bill / Stepper */}
+                            {inCartItem ? (
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px', background: '#F0FDF4', borderRadius: '8px', border: '1px solid #86EFAC', padding: '3px 6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => updateCartQty(p.id, -1)}
+                                  style={{ width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FFFFFF', border: '1px solid #BBF7D0', borderRadius: '6px', cursor: 'pointer', color: '#166534' }}
+                                  title="Reduce quantity"
+                                >
+                                  <Minus size={14} />
+                                </button>
+                                <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#166534' }}>
+                                  {inCartItem.quantity} in Bill
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => updateCartQty(p.id, 1)}
+                                  style={{ width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#15733E', border: 'none', borderRadius: '6px', cursor: 'pointer', color: '#FFFFFF' }}
+                                  title="Increase quantity"
+                                >
+                                  <Plus size={14} />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => addToBillingCart(p)}
+                                className="btn btn-sm btn-primary"
+                                style={{
+                                  width: '100%',
+                                  marginTop: '10px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '6px',
+                                  padding: '7px 10px',
+                                  fontWeight: 700,
+                                  fontSize: '0.8rem',
+                                }}
+                              >
+                                <Plus size={14} />
+                                <span>+ Add to Virtual Bill</span>
+                              </button>
+                            )}
                           </div>
                         );
                       })}
                   </div>
                 </div>
 
-                {/* RIGHT: Virtual Cart & Billing Summary */}
+                {/* RIGHT: Live Virtual Bill & Customized POS Slip */}
                 <div
                   style={{
                     position: 'sticky',
                     top: '88px',
                     background: '#FFFFFF',
                     borderRadius: '16px',
-                    border: '1px solid #E5E7EB',
-                    boxShadow: '0 4px 18px rgba(0,0,0,0.06)',
+                    border: `2px solid ${billDesign.accentColor}`,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden',
                   }}
                 >
-                  {/* Cart Header */}
+                  {/* Bill Slip Customized Header */}
                   <div
                     style={{
                       padding: '16px 20px',
+                      background: billDesign.accentColor,
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {billDesign.showLogo && (
+                          <img
+                            src="/assets/brand/sachi-kheti-emblem.jpg"
+                            alt="Emblem"
+                            style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', background: '#FFFFFF' }}
+                          />
+                        )}
+                        <span style={{ fontWeight: 900, fontSize: '0.98rem', letterSpacing: '0.3px' }}>
+                          {billDesign.companyName}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.72rem', background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                        Live Virtual Bill
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.72rem', opacity: 0.9 }}>
+                      {billDesign.tagline}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', opacity: 0.85, marginTop: '2px' }}>
+                      <span>📍 {billDesign.address}</span>
+                      <span>📞 {billDesign.phone}</span>
+                    </div>
+                  </div>
+
+                  {/* Bill Number & Cart Count Bar */}
+                  <div
+                    style={{
+                      padding: '10px 20px',
                       borderBottom: '1px solid #E5E7EB',
                       background: '#F9FAFB',
                       display: 'flex',
@@ -2276,37 +2654,37 @@ export default function AdminPortalPage({ onNavigateHome }) {
                       alignItems: 'center',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <ShoppingCart size={18} color="#15733E" />
-                      <span style={{ fontWeight: 800, fontSize: '0.96rem', color: '#1B2E23' }}>
-                        Virtual Cart ({billingCart.reduce((sum, it) => sum + it.quantity, 0)})
-                      </span>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#374151' }}>
+                      {billDesign.billTitle}
                     </div>
-                    {billingCart.length > 0 && (
-                      <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#15733E' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '0.76rem', color: '#6B7280' }}>
+                        {billingCart.reduce((sum, it) => sum + it.quantity, 0)} Items
+                      </span>
+                      <span style={{ fontSize: '0.86rem', fontWeight: 800, color: billDesign.accentColor }}>
                         ₹{billingSubtotal.toLocaleString('en-IN')}
                       </span>
-                    )}
+                    </div>
                   </div>
 
                   {/* Cart Items List */}
                   <div
                     style={{
-                      padding: '16px 20px',
-                      maxHeight: '260px',
+                      padding: '14px 18px',
+                      maxHeight: '240px',
                       overflowY: 'auto',
                       borderBottom: '1px solid #E5E7EB',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '12px',
+                      gap: '10px',
                     }}
                   >
                     {billingCart.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '28px 12px', color: '#7A8B80' }}>
                         <ShoppingCart size={32} color="#D1D5DB" style={{ margin: '0 auto 8px' }} />
-                        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#4B5563' }}>Virtual Cart is Empty</div>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#4B5563' }}>Virtual Bill is Empty</div>
                         <div style={{ fontSize: '0.78rem', marginTop: '4px' }}>
-                          Click "+ Add to Bill" on any catalog item to add it to this bill.
+                          Click "+ Add to Virtual Bill" on any catalog product to start billing.
                         </div>
                       </div>
                     ) : (
@@ -2375,12 +2753,12 @@ export default function AdminPortalPage({ onNavigateHome }) {
                                   border: '1px solid #D1D5DB',
                                   textAlign: 'right',
                                 }}
-                                title="Custom price per unit"
+                                title="Custom rate per unit"
                               />
                             </div>
 
                             {/* Line Total */}
-                            <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#15733E', minWidth: '70px', textAlign: 'right' }}>
+                            <div style={{ fontSize: '0.88rem', fontWeight: 800, color: billDesign.accentColor, minWidth: '70px', textAlign: 'right' }}>
                               ₹{(item.price * item.quantity).toLocaleString('en-IN')}
                             </div>
                           </div>
@@ -2390,15 +2768,15 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   </div>
 
                   {/* Customer Information Panel */}
-                  <div style={{ padding: '16px 20px', borderBottom: '1px solid #E5E7EB', background: '#FFFFFF' }}>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
-                      Customer & Billing Details
+                  <div style={{ padding: '14px 18px', borderBottom: '1px solid #E5E7EB', background: '#FFFFFF' }}>
+                    <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                      Customer & Payment Details
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                         <div>
-                          <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '3px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '2px' }}>
                             Customer Name *
                           </label>
                           <input
@@ -2407,11 +2785,11 @@ export default function AdminPortalPage({ onNavigateHome }) {
                             onChange={(e) => setBillingCustomer({ ...billingCustomer, name: e.target.value })}
                             placeholder="e.g. Gurpreet Singh"
                             className="form-input"
-                            style={{ margin: 0, padding: '7px 10px', fontSize: '0.82rem' }}
+                            style={{ margin: 0, padding: '6px 8px', fontSize: '0.8rem' }}
                           />
                         </div>
                         <div>
-                          <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '3px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '2px' }}>
                             Phone / WhatsApp *
                           </label>
                           <input
@@ -2420,35 +2798,21 @@ export default function AdminPortalPage({ onNavigateHome }) {
                             onChange={(e) => setBillingCustomer({ ...billingCustomer, phone: e.target.value })}
                             placeholder="e.g. 9876543210"
                             className="form-input"
-                            style={{ margin: 0, padding: '7px 10px', fontSize: '0.82rem' }}
+                            style={{ margin: 0, padding: '6px 8px', fontSize: '0.8rem' }}
                           />
                         </div>
                       </div>
 
-                      <div>
-                        <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '3px' }}>
-                          Delivery Address & City
-                        </label>
-                        <input
-                          type="text"
-                          value={billingCustomer.address}
-                          onChange={(e) => setBillingCustomer({ ...billingCustomer, address: e.target.value })}
-                          placeholder="e.g. Store Direct Sale / VPO Fatehabad"
-                          className="form-input"
-                          style={{ margin: 0, padding: '7px 10px', fontSize: '0.82rem' }}
-                        />
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                         <div>
-                          <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '3px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '2px' }}>
                             Payment Method
                           </label>
                           <select
                             value={billingCustomer.paymentMethod}
                             onChange={(e) => setBillingCustomer({ ...billingCustomer, paymentMethod: e.target.value })}
                             className="form-select"
-                            style={{ margin: 0, padding: '7px 10px', fontSize: '0.82rem' }}
+                            style={{ margin: 0, padding: '6px 8px', fontSize: '0.8rem' }}
                           >
                             <option value="CASH">Cash in Hand / COD</option>
                             <option value="UPI">UPI / QR Code</option>
@@ -2458,14 +2822,14 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           </select>
                         </div>
                         <div>
-                          <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '3px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#4B5563', display: 'block', marginBottom: '2px' }}>
                             Payment Status
                           </label>
                           <select
                             value={billingCustomer.paymentStatus}
                             onChange={(e) => setBillingCustomer({ ...billingCustomer, paymentStatus: e.target.value })}
                             className="form-select"
-                            style={{ margin: 0, padding: '7px 10px', fontSize: '0.82rem' }}
+                            style={{ margin: 0, padding: '6px 8px', fontSize: '0.8rem' }}
                           >
                             <option value="PAID">PAID (Complete)</option>
                             <option value="PENDING">PENDING (Payment Due)</option>
@@ -2476,13 +2840,13 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   </div>
 
                   {/* Pricing Breakdown & Disount */}
-                  <div style={{ padding: '16px 20px', background: '#F9FAFB' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', color: '#4B5563', marginBottom: '6px' }}>
-                      <span>Items Subtotal:</span>
+                  <div style={{ padding: '14px 18px', background: '#F9FAFB' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#4B5563', marginBottom: '5px' }}>
+                      <span>Subtotal:</span>
                       <span style={{ fontWeight: 600 }}>₹{billingSubtotal.toLocaleString('en-IN')}</span>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem', color: '#4B5563', marginBottom: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', color: '#4B5563', marginBottom: '5px' }}>
                       <span>Discount / Concession:</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                         <span>-₹</span>
@@ -2490,12 +2854,12 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           type="number"
                           value={billingDiscount}
                           onChange={(e) => setBillingDiscount(parseFloat(e.target.value) || 0)}
-                          style={{ width: '70px', padding: '3px 6px', fontSize: '0.82rem', borderRadius: '4px', border: '1px solid #D1D5DB', textAlign: 'right' }}
+                          style={{ width: '65px', padding: '3px 6px', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid #D1D5DB', textAlign: 'right' }}
                         />
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem', color: '#4B5563', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', color: '#4B5563', marginBottom: '10px' }}>
                       <span>Delivery / Freight:</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                         <span>+₹</span>
@@ -2503,18 +2867,65 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           type="number"
                           value={billingDelivery}
                           onChange={(e) => setBillingDelivery(parseFloat(e.target.value) || 0)}
-                          style={{ width: '70px', padding: '3px 6px', fontSize: '0.82rem', borderRadius: '4px', border: '1px solid #D1D5DB', textAlign: 'right' }}
+                          style={{ width: '65px', padding: '3px 6px', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid #D1D5DB', textAlign: 'right' }}
                         />
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: '10px', borderTop: '2px dashed #E5E7EB' }}>
-                      <span style={{ fontSize: '1rem', fontWeight: 800, color: '#1F2937' }}>Grand Total:</span>
-                      <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#15733E' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: '8px', borderTop: '2px dashed #E5E7EB' }}>
+                      <span style={{ fontSize: '0.96rem', fontWeight: 800, color: '#1F2937' }}>Grand Total:</span>
+                      <span style={{ fontSize: '1.4rem', fontWeight: 900, color: billDesign.accentColor }}>
                         ₹{billingGrandTotal.toLocaleString('en-IN')}
                       </span>
                     </div>
 
+                    {/* Quick Print & WhatsApp Action Buttons */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '12px' }}>
+                      <button
+                        type="button"
+                        onClick={handleDirectPrintVirtualBill}
+                        disabled={billingCart.length === 0}
+                        className="btn btn-secondary"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          padding: '9px 10px',
+                          fontSize: '0.84rem',
+                          fontWeight: 700,
+                        }}
+                      >
+                        <Printer size={15} />
+                        <span>Print / PDF</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleDirectWhatsAppVirtualBill}
+                        disabled={billingCart.length === 0}
+                        className="btn btn-secondary"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          padding: '9px 10px',
+                          fontSize: '0.84rem',
+                          fontWeight: 700,
+                          color: '#15803D',
+                          borderColor: '#BBF7D0',
+                          background: '#F0FDF4',
+                        }}
+                      >
+                        <Send size={15} />
+                        <span>
+                          {whatsappStatus?.status === 'CONNECTED' ? 'WhatsApp Baileys' : 'Send WhatsApp'}
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* Primary Save & Finalize Order Button */}
                     <button
                       type="button"
                       onClick={handleCreateBill}
@@ -2522,26 +2933,27 @@ export default function AdminPortalPage({ onNavigateHome }) {
                       className="btn btn-primary"
                       style={{
                         width: '100%',
-                        marginTop: '16px',
-                        padding: '13px',
-                        fontSize: '0.98rem',
+                        marginTop: '10px',
+                        padding: '12px',
+                        fontSize: '0.94rem',
                         fontWeight: 800,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: '8px',
-                        boxShadow: '0 4px 14px rgba(21,115,62,0.3)',
+                        background: billDesign.accentColor,
+                        borderColor: billDesign.accentColor,
                       }}
                     >
                       {generatingBill ? (
                         <>
-                          <RefreshCw size={18} className="spin" />
-                          <span>Generating Official Invoice...</span>
+                          <RefreshCw size={17} className="spin" />
+                          <span>Recording Official Invoice...</span>
                         </>
                       ) : (
                         <>
-                          <Receipt size={18} />
-                          <span>Generate & Save Bill (₹{billingGrandTotal.toLocaleString('en-IN')})</span>
+                          <Receipt size={17} />
+                          <span>Save & Finalize Bill (₹{billingGrandTotal.toLocaleString('en-IN')})</span>
                         </>
                       )}
                     </button>
@@ -3016,75 +3428,646 @@ export default function AdminPortalPage({ onNavigateHome }) {
           )}
 
           {/* ==================================================== */}
-          {/* TAB 5: ANNOUNCEMENT RIBBON                           */}
+          {/* TAB 5: SYSTEM & STORE SETTINGS                      */}
           {/* ==================================================== */}
-          {activeTab === 'banner' && (
-            <div className="admin-tab-view" style={{ maxWidth: '720px' }}>
+          {activeTab === 'settings' && (
+            <div className="admin-tab-view">
               <div className="admin-view-header">
                 <div>
-                  <h1 className="admin-view-title">Top Announcement Ribbon</h1>
-                  <p className="admin-view-sub">Live promotional banner displayed across the header</p>
+                  <h1 className="admin-view-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Settings size={28} color="#15733E" />
+                    <span>Platform & Store Settings</span>
+                  </h1>
+                  <p className="admin-view-sub">
+                    Manage promotional announcement ribbons, link WhatsApp via Baileys QR code, and customize invoice & bill templates
+                  </p>
                 </div>
               </div>
 
-              <div className="admin-panel-card">
-                <form onSubmit={handleSaveBanner}>
-                  <div className="form-group">
-                    <label className="form-label">Banner Title</label>
-                    <input
-                      type="text"
-                      required
-                      value={banner.title}
-                      onChange={(e) => setBanner({ ...banner, title: e.target.value })}
-                      className="form-input"
-                      placeholder="e.g. 🌾 SachiKheti Festive Harvest Offer"
-                    />
-                  </div>
+              {/* Settings Sub-Navigation Tabs */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '8px',
+                  background: '#FFFFFF',
+                  padding: '8px 12px',
+                  borderRadius: '12px',
+                  border: '1px solid #E5E7EB',
+                  marginBottom: '24px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSettingsSubTab('ribbon')}
+                  className={`btn btn-sm ${settingsSubTab === 'ribbon' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '0.86rem' }}
+                >
+                  <Megaphone size={16} />
+                  <span>Announcement Ribbon</span>
+                </button>
 
-                  <div className="form-group">
-                    <label className="form-label">Banner Message</label>
-                    <textarea
-                      rows={3}
-                      required
-                      value={banner.message}
-                      onChange={(e) => setBanner({ ...banner, message: e.target.value })}
-                      className="form-textarea"
-                      placeholder="e.g. Get 10% off on Pure Desi Ghee & Pinnis using code SACHI10! WhatsApp Direct Delivery available."
-                    />
-                  </div>
+                <button
+                  type="button"
+                  onClick={() => setSettingsSubTab('whatsapp')}
+                  className={`btn btn-sm ${settingsSubTab === 'whatsapp' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '0.86rem' }}
+                >
+                  <MessageSquare size={16} />
+                  <span>WhatsApp Baileys Connect</span>
+                  {whatsappStatus?.status === 'CONNECTED' ? (
+                    <span style={{ fontSize: '0.72rem', background: '#D1FAE5', color: '#065F46', padding: '2px 8px', borderRadius: '12px', fontWeight: 800 }}>
+                      Live
+                    </span>
+                  ) : whatsappStatus?.status === 'SCAN_QR' ? (
+                    <span style={{ fontSize: '0.72rem', background: '#FEF3C7', color: '#92400E', padding: '2px 8px', borderRadius: '12px', fontWeight: 800 }}>
+                      Scan QR
+                    </span>
+                  ) : null}
+                </button>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '16px 0 24px' }}>
-                    <input
-                      type="checkbox"
-                      id="bannerActive"
-                      checked={banner.isActive}
-                      onChange={(e) => setBanner({ ...banner, isActive: e.target.checked })}
-                      style={{ width: '18px', height: '18px' }}
-                    />
-                    <label htmlFor="bannerActive" style={{ fontSize: '0.9rem', fontWeight: 600, color: '#122117', cursor: 'pointer' }}>
-                      Publish Banner Active on Live Site
-                    </label>
-                  </div>
+                <button
+                  type="button"
+                  onClick={() => setSettingsSubTab('bill')}
+                  className={`btn btn-sm ${settingsSubTab === 'bill' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '0.86rem' }}
+                >
+                  <Palette size={16} />
+                  <span>Customized Bill Design</span>
+                </button>
+              </div>
 
-                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                    <button type="submit" className="btn btn-primary">
-                      <CheckCircle size={17} />
-                      <span>Save Announcement Live</span>
-                    </button>
-                    {banner.id && (
-                      <button
-                        type="button"
-                        onClick={handleDeleteBanner}
-                        className="btn btn-secondary text-red"
-                        title="Delete this banner from database"
+              {/* SUB-TAB 1: ANNOUNCEMENT RIBBON */}
+              {settingsSubTab === 'ribbon' && (
+                <div style={{ maxWidth: '800px' }}>
+                  {/* Live Preview Card */}
+                  <div style={{ marginBottom: '20px', background: '#FFFFFF', padding: '16px 20px', borderRadius: '14px', border: '1px solid #E5E7EB' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', marginBottom: '8px' }}>
+                      Live Storefront Banner Preview:
+                    </div>
+                    {banner.isActive ? (
+                      <div
+                        style={{
+                          background: 'linear-gradient(90deg, #0A3E22 0%, #15733E 100%)',
+                          color: '#FFFFFF',
+                          padding: '12px 18px',
+                          borderRadius: '10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                        }}
                       >
-                        <Trash2 size={16} />
-                        <span>Delete Banner</span>
-                      </button>
+                        <Megaphone size={18} color="#FBBF24" style={{ flexShrink: 0 }} />
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#FDE68A' }}>
+                            {banner.title || 'Announcement Title'}
+                          </div>
+                          <div style={{ fontSize: '0.82rem', color: '#E6F4EA', marginTop: '2px' }}>
+                            {banner.message || 'Announcement message displayed to all customer store visitors.'}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ padding: '12px 16px', background: '#F3F4F6', color: '#6B7280', borderRadius: '10px', fontSize: '0.84rem', fontStyle: 'italic' }}>
+                        Ribbon is currently deactivated (hidden from storefront visitors).
+                      </div>
                     )}
                   </div>
-                </form>
-              </div>
+
+                  <div className="admin-panel-card">
+                    <form onSubmit={handleSaveBanner}>
+                      <div className="form-group">
+                        <label className="form-label">Banner Title</label>
+                        <input
+                          type="text"
+                          required
+                          value={banner.title}
+                          onChange={(e) => setBanner({ ...banner, title: e.target.value })}
+                          className="form-input"
+                          placeholder="e.g. 🌾 SachiKheti Festive Harvest Offer"
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Banner Message</label>
+                        <textarea
+                          rows={3}
+                          required
+                          value={banner.message}
+                          onChange={(e) => setBanner({ ...banner, message: e.target.value })}
+                          className="form-textarea"
+                          placeholder="e.g. Get 10% off on Pure Desi Ghee & Sweets! Direct WhatsApp farmer delivery available."
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '16px 0 24px' }}>
+                        <input
+                          type="checkbox"
+                          id="bannerActive"
+                          checked={banner.isActive}
+                          onChange={(e) => setBanner({ ...banner, isActive: e.target.checked })}
+                          style={{ width: '18px', height: '18px' }}
+                        />
+                        <label htmlFor="bannerActive" style={{ fontSize: '0.9rem', fontWeight: 600, color: '#122117', cursor: 'pointer' }}>
+                          Publish Banner Active on Live Site
+                        </label>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        <button type="submit" className="btn btn-primary">
+                          <CheckCircle size={17} />
+                          <span>Save Announcement Ribbon</span>
+                        </button>
+                        {banner.id && (
+                          <button
+                            type="button"
+                            onClick={handleDeleteBanner}
+                            className="btn btn-secondary text-red"
+                            title="Delete this banner from database"
+                          >
+                            <Trash2 size={16} />
+                            <span>Delete Ribbon</span>
+                          </button>
+                        )}
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-TAB 2: WHATSAPP BAILEYS INTEGRATION */}
+              {settingsSubTab === 'whatsapp' && (
+                <div style={{ maxWidth: '820px' }}>
+                  <div
+                    style={{
+                      background: '#FFFFFF',
+                      borderRadius: '16px',
+                      border: '1px solid #E5E7EB',
+                      padding: '24px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                      marginBottom: '20px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px' }}>
+                      <div>
+                        <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1F2937', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <MessageSquare size={22} color="#15733E" />
+                          <span>WhatsApp Baileys Headless Client</span>
+                        </h3>
+                        <p style={{ fontSize: '0.84rem', color: '#6B7280', marginTop: '4px' }}>
+                          Direct server-side WhatsApp Web session for automated invoice & bill dispatching without opening external apps.
+                        </p>
+                      </div>
+
+                      {/* Status Indicator Badge */}
+                      <div>
+                        {whatsappStatus?.status === 'CONNECTED' ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: '#D1FAE5', color: '#065F46', fontWeight: 800, fontSize: '0.84rem', border: '1px solid #A7F3D0' }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#059669' }} />
+                            Connected as +{whatsappStatus.user?.phone || 'Mobile'}
+                          </span>
+                        ) : whatsappStatus?.status === 'SCAN_QR' ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: '#FEF3C7', color: '#92400E', fontWeight: 800, fontSize: '0.84rem', border: '1px solid #FDE68A' }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#D97706' }} />
+                            Awaiting QR Code Scan
+                          </span>
+                        ) : whatsappStatus?.status === 'CONNECTING' ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: '#EFF6FF', color: '#1D4ED8', fontWeight: 800, fontSize: '0.84rem', border: '1px solid #BFDBFE' }}>
+                            <RefreshCw size={13} className="spin" />
+                            Connecting Baileys...
+                          </span>
+                        ) : (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: '#F3F4F6', color: '#4B5563', fontWeight: 700, fontSize: '0.84rem', border: '1px solid #E5E7EB' }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#9CA3AF' }} />
+                            Disconnected
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* QR Code Presentation when SCAN_QR */}
+                    {whatsappStatus?.status === 'SCAN_QR' && whatsappStatus.qr && (
+                      <div
+                        style={{
+                          background: '#F9FAFB',
+                          borderRadius: '14px',
+                          border: '2px dashed #15733E',
+                          padding: '24px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          textAlign: 'center',
+                          margin: '18px 0',
+                        }}
+                      >
+                        <h4 style={{ fontSize: '1rem', fontWeight: 800, color: '#15733E', marginBottom: '8px' }}>
+                          Scan with WhatsApp on your Mobile Phone
+                        </h4>
+                        <p style={{ fontSize: '0.84rem', color: '#4B5563', maxWidth: '440px', marginBottom: '16px' }}>
+                          1. Open <strong>WhatsApp</strong> on your mobile.<br />
+                          2. Tap <strong>Settings</strong> or <strong>Three Dots (⋮)</strong> &gt; <strong>Linked Devices</strong>.<br />
+                          3. Tap <strong>Link a Device</strong> and point your camera at this QR code:
+                        </p>
+
+                        <div
+                          style={{
+                            background: '#FFFFFF',
+                            padding: '16px',
+                            borderRadius: '16px',
+                            boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+                            border: '1px solid #E5E7EB',
+                          }}
+                        >
+                          <img
+                            src={whatsappStatus.qr}
+                            alt="WhatsApp Baileys QR Code"
+                            style={{ width: '240px', height: '240px', display: 'block', borderRadius: '8px' }}
+                          />
+                        </div>
+
+                        <div style={{ marginTop: '16px', display: 'flex', gap: '10px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleStartWhatsApp(true)}
+                            disabled={loadingWhatsApp}
+                            className="btn btn-secondary btn-sm"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                          >
+                            <RefreshCw size={14} className={loadingWhatsApp ? 'spin' : ''} />
+                            <span>Regenerate New QR</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Connected View */}
+                    {whatsappStatus?.status === 'CONNECTED' ? (
+                      <div style={{ background: '#F0FDF4', borderRadius: '12px', border: '1px solid #BBF7D0', padding: '18px', marginTop: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                          <div>
+                            <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#166534' }}>
+                              ✓ Session Verified & Active
+                            </div>
+                            <div style={{ fontSize: '0.82rem', color: '#15803D', marginTop: '2px' }}>
+                              All virtual bills, payment links, and receipts can now be dispatched instantly with zero redirection.
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleDisconnectWhatsApp}
+                            disabled={loadingWhatsApp}
+                            className="btn btn-secondary btn-sm text-red"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                          >
+                            <LogOut size={14} />
+                            <span>Disconnect WhatsApp Session</span>
+                          </button>
+                        </div>
+
+                        {/* Test Message Form */}
+                        <form onSubmit={handleSendTestWhatsApp} style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px solid #DCFCE7' }}>
+                          <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#166534', display: 'block', marginBottom: '6px' }}>
+                            Send Test Verification Message
+                          </label>
+                          <div style={{ display: 'flex', gap: '10px' }}>
+                            <input
+                              type="text"
+                              value={whatsappTestPhone}
+                              onChange={(e) => setWhatsappTestPhone(e.target.value)}
+                              placeholder="Enter 10-digit mobile number (e.g. 9876543210)"
+                              className="form-input"
+                              style={{ margin: 0, flex: 1, padding: '8px 12px', fontSize: '0.85rem' }}
+                            />
+                            <button
+                              type="submit"
+                              disabled={sendingWhatsApp}
+                              className="btn btn-primary btn-sm"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                            >
+                              {sendingWhatsApp ? <RefreshCw size={14} className="spin" /> : <Send size={14} />}
+                              <span>Send Test Ping</span>
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    ) : (
+                      /* Disconnected View Action */
+                      whatsappStatus?.status !== 'SCAN_QR' && (
+                        <div style={{ marginTop: '14px' }}>
+                          <p style={{ fontSize: '0.84rem', color: '#4B5563', marginBottom: '14px' }}>
+                            Click below to generate a real-time QR code. Once scanned, your WhatsApp account will be linked to the backend for direct invoice broadcasting.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => handleStartWhatsApp(false)}
+                            disabled={loadingWhatsApp}
+                            className="btn btn-primary"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                          >
+                            {loadingWhatsApp ? (
+                              <>
+                                <RefreshCw size={16} className="spin" />
+                                <span>Generating QR Code...</span>
+                              </>
+                            ) : (
+                              <>
+                                <QrCode size={18} />
+                                <span>Connect WhatsApp (Show QR Code)</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-TAB 3: CUSTOMIZED BILL DESIGN */}
+              {settingsSubTab === 'bill' && (
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1.25fr) minmax(360px, 420px)',
+                    gap: '24px',
+                    alignItems: 'start',
+                  }}
+                >
+                  {/* Left: Customization Form */}
+                  <div
+                    style={{
+                      background: '#FFFFFF',
+                      borderRadius: '16px',
+                      border: '1px solid #E5E7EB',
+                      padding: '24px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                    }}
+                  >
+                    <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1F2937', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Palette size={20} color={billDesign.accentColor} />
+                      <span>Customized Invoice & Bill Template</span>
+                    </h3>
+                    <p style={{ fontSize: '0.82rem', color: '#6B7280', marginBottom: '20px' }}>
+                      Customize company headers, tax identifiers, billing titles, and themes for all generated invoices and virtual bills.
+                    </p>
+
+                    <form onSubmit={handleSaveBillDesign} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem' }}>Company / Store Name (English & Punjabi)</label>
+                        <input
+                          type="text"
+                          required
+                          value={billDesign.companyName}
+                          onChange={(e) => setBillDesign({ ...billDesign, companyName: e.target.value })}
+                          className="form-input"
+                          style={{ margin: 0 }}
+                          placeholder="e.g. ਸੱਚੀ ਖੇਤੀ | SachiKheti (LFPC Ltd.)"
+                        />
+                      </div>
+
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem' }}>Tagline / Organization Subtitle</label>
+                        <input
+                          type="text"
+                          value={billDesign.tagline}
+                          onChange={(e) => setBillDesign({ ...billDesign, tagline: e.target.value })}
+                          className="form-input"
+                          style={{ margin: 0 }}
+                          placeholder="e.g. Direct Farmer Prosperity • Certified Natural Produce & Farm Machinery"
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Invoice Header Title</label>
+                          <input
+                            type="text"
+                            required
+                            value={billDesign.billTitle}
+                            onChange={(e) => setBillDesign({ ...billDesign, billTitle: e.target.value })}
+                            className="form-input"
+                            style={{ margin: 0 }}
+                            placeholder="e.g. TAX INVOICE / CASH MEMO"
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Tax / FSSAI / GSTIN Numbers</label>
+                          <input
+                            type="text"
+                            value={billDesign.gstin}
+                            onChange={(e) => setBillDesign({ ...billDesign, gstin: e.target.value })}
+                            className="form-input"
+                            style={{ margin: 0 }}
+                            placeholder="e.g. FSSAI: 20822005001234 | GSTIN: ..."
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Store Address</label>
+                          <input
+                            type="text"
+                            value={billDesign.address}
+                            onChange={(e) => setBillDesign({ ...billDesign, address: e.target.value })}
+                            className="form-input"
+                            style={{ margin: 0 }}
+                            placeholder="e.g. VPO Bhirdana, Fatehabad, Haryana"
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Official Contact Phone</label>
+                          <input
+                            type="text"
+                            value={billDesign.phone}
+                            onChange={(e) => setBillDesign({ ...billDesign, phone: e.target.value })}
+                            className="form-input"
+                            style={{ margin: 0 }}
+                            placeholder="e.g. +91 8360253372"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Theme Accent Color Picker */}
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '8px' }}>
+                          Invoice Theme Accent Color
+                        </label>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          {[
+                            { name: 'Forest Green', hex: '#15733E' },
+                            { name: 'Royal Navy', hex: '#1E3A8A' },
+                            { name: 'Crimson Red', hex: '#991B1B' },
+                            { name: 'Harvest Gold', hex: '#B45309' },
+                            { name: 'Classic Charcoal', hex: '#1F2937' },
+                          ].map((c) => (
+                            <button
+                              key={c.hex}
+                              type="button"
+                              onClick={() => setBillDesign({ ...billDesign, accentColor: c.hex })}
+                              style={{
+                                width: '38px',
+                                height: '38px',
+                                borderRadius: '50%',
+                                background: c.hex,
+                                border: billDesign.accentColor === c.hex ? '3px solid #000000' : '2px solid #FFFFFF',
+                                boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#FFFFFF',
+                                transition: 'transform 0.15s ease',
+                                transform: billDesign.accentColor === c.hex ? 'scale(1.15)' : 'scale(1)',
+                              }}
+                              title={c.name}
+                            >
+                              {billDesign.accentColor === c.hex && <Check size={16} strokeWidth={3} />}
+                            </button>
+                          ))}
+                          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: billDesign.accentColor, marginLeft: '8px' }}>
+                            {billDesign.accentColor}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem' }}>Terms & Conditions / Assurance Note</label>
+                        <textarea
+                          rows={2}
+                          value={billDesign.termsNotes}
+                          onChange={(e) => setBillDesign({ ...billDesign, termsNotes: e.target.value })}
+                          className="form-textarea"
+                          style={{ margin: 0, fontSize: '0.8rem' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '20px', margin: '4px 0' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={billDesign.showLogo}
+                            onChange={(e) => setBillDesign({ ...billDesign, showLogo: e.target.checked })}
+                          />
+                          <span>Show SachiKheti Emblem</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={billDesign.showSignature}
+                            onChange={(e) => setBillDesign({ ...billDesign, showSignature: e.target.checked })}
+                          />
+                          <span>Show Authorized Signatory Line</span>
+                        </label>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={savingBillDesign}
+                        className="btn btn-primary"
+                        style={{ marginTop: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                      >
+                        {savingBillDesign ? <RefreshCw size={16} className="spin" /> : <CheckCircle size={16} />}
+                        <span>Save Customized Bill Design</span>
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Right: Real-time Live Bill Preview */}
+                  <div
+                    style={{
+                      background: '#FFFFFF',
+                      borderRadius: '16px',
+                      border: `2px solid ${billDesign.accentColor}`,
+                      padding: '20px',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+                    }}
+                  >
+                    <div style={{ fontSize: '0.74rem', fontWeight: 800, color: billDesign.accentColor, textTransform: 'uppercase', marginBottom: '12px', letterSpacing: '0.5px' }}>
+                      Real-time Invoice Slip Preview
+                    </div>
+
+                    <div style={{ borderBottom: `2px solid ${billDesign.accentColor}`, paddingBottom: '12px', marginBottom: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {billDesign.showLogo && (
+                          <img
+                            src="/assets/brand/sachi-kheti-emblem.jpg"
+                            alt="Emblem"
+                            style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
+                          />
+                        )}
+                        <div>
+                          <div style={{ fontSize: '1rem', fontWeight: 900, color: billDesign.accentColor }}>
+                            {billDesign.companyName}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#4B5563', lineHeight: 1.2 }}>
+                            {billDesign.tagline}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '0.68rem', color: '#6B7280', marginTop: '6px' }}>
+                        📍 {billDesign.address} • 📞 {billDesign.phone}
+                      </div>
+                      {billDesign.gstin && (
+                        <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginTop: '2px' }}>
+                          {billDesign.gstin}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', marginBottom: '10px' }}>
+                      <span style={{ fontWeight: 800, color: '#1F2937' }}>{billDesign.billTitle}</span>
+                      <span style={{ fontWeight: 700, color: billDesign.accentColor }}>#SK-BILL-2026-PREVIEW</span>
+                    </div>
+
+                    <div style={{ background: '#F9FAFB', padding: '8px 10px', borderRadius: '8px', fontSize: '0.74rem', marginBottom: '12px' }}>
+                      <div><strong>Farmer / Customer:</strong> Gurpreet Singh</div>
+                      <div><strong>Payment:</strong> CASH IN HAND (PAID)</div>
+                    </div>
+
+                    {/* Sample Items Table */}
+                    <table style={{ width: '100%', fontSize: '0.74rem', borderCollapse: 'collapse', marginBottom: '12px' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #E5E7EB', color: '#6B7280', textAlign: 'left' }}>
+                          <th style={{ padding: '4px 0' }}>Item</th>
+                          <th style={{ padding: '4px 0', textAlign: 'center' }}>Qty</th>
+                          <th style={{ padding: '4px 0', textAlign: 'right' }}>Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
+                          <td style={{ padding: '4px 0', fontWeight: 600 }}>Pure Desi Ghee (500 ml)</td>
+                          <td style={{ padding: '4px 0', textAlign: 'center' }}>2</td>
+                          <td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 700, color: billDesign.accentColor }}>₹1,200</td>
+                        </tr>
+                        <tr style={{ borderBottom: '1px solid #F3F4F6' }}>
+                          <td style={{ padding: '4px 0', fontWeight: 600 }}>Laser Land Leveler (1 Hour)</td>
+                          <td style={{ padding: '4px 0', textAlign: 'center' }}>1</td>
+                          <td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 700, color: billDesign.accentColor }}>₹900</td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.94rem', fontWeight: 900, color: billDesign.accentColor, borderTop: `1px solid ${billDesign.accentColor}`, paddingTop: '8px' }}>
+                      <span>Grand Total:</span>
+                      <span>₹2,100</span>
+                    </div>
+
+                    <div style={{ fontSize: '0.66rem', color: '#6B7280', marginTop: '14px', whiteSpace: 'pre-line' }}>
+                      {billDesign.termsNotes}
+                    </div>
+
+                    {billDesign.showSignature && (
+                      <div style={{ textAlign: 'right', marginTop: '16px', fontSize: '0.7rem' }}>
+                        <div style={{ borderTop: '1px solid #9CA3AF', display: 'inline-block', paddingTop: '3px', fontWeight: 700, color: '#374151' }}>
+                          {billDesign.authorizedSignatoryTitle}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </main>
@@ -4350,30 +5333,37 @@ export default function AdminPortalPage({ onNavigateHome }) {
               }}
             >
               {/* Company & Bill Lockup */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #15733E', paddingBottom: '16px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: `2px solid ${billDesign.accentColor}`, paddingBottom: '16px', marginBottom: '20px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <img
-                    src="/assets/brand/sachi-kheti-emblem.jpg"
-                    alt="Emblem"
-                    style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover' }}
-                  />
+                  {billDesign.showLogo && (
+                    <img
+                      src="/assets/brand/sachi-kheti-emblem.jpg"
+                      alt="Emblem"
+                      style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover' }}
+                    />
+                  )}
                   <div>
-                    <h2 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#15733E', margin: 0 }}>
-                      SACHI KHETI
+                    <h2 style={{ fontSize: '1.35rem', fontWeight: 900, color: billDesign.accentColor, margin: 0 }}>
+                      {billDesign.companyName}
                     </h2>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151' }}>
-                      By Lakhwinder Farmer Producer Company (LFPC Ltd.)
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', marginTop: '2px' }}>
+                      {billDesign.tagline}
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#6B7280', marginTop: '2px' }}>
-                      📍 VPO Fatehabad, Punjab/Haryana • 📞 +91 83602 53372
+                      📍 {billDesign.address} • 📞 {billDesign.phone}
                     </div>
+                    {billDesign.gstin && (
+                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#374151', marginTop: '2px' }}>
+                        {billDesign.gstin}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#1F2937', letterSpacing: '0.5px' }}>
-                    TAX INVOICE
+                    {billDesign.billTitle}
                   </div>
-                  <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#15733E', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.84rem', fontWeight: 700, color: billDesign.accentColor, marginTop: '2px' }}>
                     #{generatedInvoice.orderNumber}
                   </div>
                   <div style={{ fontSize: '0.76rem', color: '#6B7280', marginTop: '2px' }}>
@@ -4471,7 +5461,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                       <span>+₹{Number(generatedInvoice.delivery).toLocaleString('en-IN')}</span>
                     </div>
                   )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.15rem', fontWeight: 900, color: '#15733E', borderTop: '2px solid #E5E7EB', paddingTop: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.15rem', fontWeight: 900, color: billDesign.accentColor, borderTop: `2px solid ${billDesign.accentColor}`, paddingTop: '8px' }}>
                     <span>Total Amount:</span>
                     <span>₹{Number(generatedInvoice.totalAmount).toLocaleString('en-IN')}</span>
                   </div>
@@ -4480,16 +5470,17 @@ export default function AdminPortalPage({ onNavigateHome }) {
 
               {/* Signatory & Terms */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderTop: '1px solid #E5E7EB', paddingTop: '16px', fontSize: '0.74rem', color: '#6B7280' }}>
-                <div>
-                  <div>• Goods once sold are backed by genuine farmer collective quality assurance.</div>
-                  <div>• Computer-generated tax invoice issued by Lakhwinder FPC Ltd.</div>
+                <div style={{ maxWidth: '420px', whiteSpace: 'pre-line' }}>
+                  {billDesign.termsNotes}
                 </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ height: '32px' }}></div>
-                  <div style={{ borderTop: '1px solid #9CA3AF', paddingTop: '4px', fontWeight: 700, color: '#374151', minWidth: '130px' }}>
-                    Authorized Signatory
+                {billDesign.showSignature && (
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ height: '32px' }}></div>
+                    <div style={{ borderTop: '1px solid #9CA3AF', paddingTop: '4px', fontWeight: 700, color: '#374151', minWidth: '150px' }}>
+                      {billDesign.authorizedSignatoryTitle}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 

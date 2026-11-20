@@ -34,3 +34,6 @@ export const verifyAdminToken = (req, res, next) => {
   }
 };
 
+export const requireAdmin = verifyAdminToken;
+export default verifyAdminToken;
+
