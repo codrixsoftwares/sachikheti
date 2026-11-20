@@ -44,7 +44,12 @@ import {
   Palette,
   QrCode,
   Share2,
-  CheckSquare
+  CheckSquare,
+  History,
+  Download,
+  FileSpreadsheet,
+  DollarSign,
+  ArrowUpDown
 } from 'lucide-react';
 import {
   getSupabaseConfig,
@@ -124,6 +129,16 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const [generatedInvoice, setGeneratedInvoice] = useState(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showCustomItemModal, setShowCustomItemModal] = useState(false);
+
+  // Past Orders & Bills History State
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyTypeFilter, setHistoryTypeFilter] = useState('all'); // 'all', 'pos', 'store', 'whatsapp'
+  const [historyPaymentStatusFilter, setHistoryPaymentStatusFilter] = useState('all'); // 'all', 'PAID', 'PENDING'
+  const [historyPaymentMethodFilter, setHistoryPaymentMethodFilter] = useState('all'); // 'all', 'CASH', 'UPI', 'BANK_TRANSFER', 'RAZORPAY', 'CREDIT', 'WHATSAPP'
+  const [historyDatePreset, setHistoryDatePreset] = useState('all'); // 'all', 'today', 'yesterday', '7days', '30days'
+  const [historySort, setHistorySort] = useState('newest'); // 'newest', 'oldest', 'highest', 'lowest'
+  const [historyViewMode, setHistoryViewMode] = useState('table'); // 'table', 'cards'
+
   const [customItemForm, setCustomItemForm] = useState({
     title: '',
     titlePunjabi: '',
@@ -1091,6 +1106,162 @@ export default function AdminPortalPage({ onNavigateHome }) {
   };
 
   // ==========================================
+  // PAST ORDERS & BILLS HISTORY ACTIONS
+  // ==========================================
+  const handleViewPastBill = (order) => {
+    let parsedItems = [];
+    try {
+      parsedItems = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+    } catch (e) {
+      parsedItems = [];
+    }
+    let discount = 0;
+    let delivery = 0;
+    if (order.notes) {
+      const discMatch = order.notes.match(/Discount:\s*₹?([\d.]+)/i);
+      const delMatch = order.notes.match(/Delivery:\s*₹?([\d.]+)/i);
+      if (discMatch) discount = parseFloat(discMatch[1]) || 0;
+      if (delMatch) delivery = parseFloat(delMatch[1]) || 0;
+    }
+    const invoice = {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      date: order.createdAt,
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      address: order.address,
+      city: order.city,
+      pincode: order.pincode,
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.paymentStatus,
+      orderStatus: order.orderStatus || order.status,
+      notes: order.notes,
+      items: (parsedItems || []).map((it) => ({
+        title: it.title || it.name,
+        price: Number(it.price || 0),
+        quantity: Number(it.quantity || 1),
+        unit: it.unit || '',
+        subtotal: Number(it.price || 0) * Number(it.quantity || 1),
+      })),
+      subtotal: (parsedItems || []).reduce((sum, it) => sum + (Number(it.price || 0) * Number(it.quantity || 1)), 0),
+      discount,
+      delivery,
+      totalAmount: order.totalAmount,
+    };
+    setGeneratedInvoice(invoice);
+    setShowInvoiceModal(true);
+  };
+
+  const handleWhatsAppPastBill = (order) => {
+    let parsedItems = [];
+    try {
+      parsedItems = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+    } catch (e) {
+      parsedItems = [];
+    }
+    let discount = 0;
+    let delivery = 0;
+    if (order.notes) {
+      const discMatch = order.notes.match(/Discount:\s*₹?([\d.]+)/i);
+      const delMatch = order.notes.match(/Delivery:\s*₹?([\d.]+)/i);
+      if (discMatch) discount = parseFloat(discMatch[1]) || 0;
+      if (delMatch) delivery = parseFloat(delMatch[1]) || 0;
+    }
+    const invoice = {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      date: order.createdAt,
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      address: order.address,
+      city: order.city,
+      pincode: order.pincode,
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.paymentStatus,
+      orderStatus: order.orderStatus || order.status,
+      notes: order.notes,
+      items: (parsedItems || []).map((it) => ({
+        title: it.title || it.name,
+        price: Number(it.price || 0),
+        quantity: Number(it.quantity || 1),
+        unit: it.unit || '',
+        subtotal: Number(it.price || 0) * Number(it.quantity || 1),
+      })),
+      subtotal: (parsedItems || []).reduce((sum, it) => sum + (Number(it.price || 0) * Number(it.quantity || 1)), 0),
+      discount,
+      delivery,
+      totalAmount: order.totalAmount,
+    };
+    handleWhatsAppInvoice(invoice);
+  };
+
+  const handleTogglePaymentStatus = async (orderId, currentStatus) => {
+    const nextStatus = currentStatus === 'PAID' ? 'PENDING' : 'PAID';
+    try {
+      const res = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ paymentStatus: nextStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActionSuccess(`Payment status toggled to "${nextStatus}"`);
+        setTimeout(() => setActionSuccess(''), 3000);
+        loadAllData();
+      } else {
+        alert(data.message || 'Failed to update payment status');
+      }
+    } catch (err) {
+      alert('Error updating payment status');
+    }
+  };
+
+  const exportHistoryToCSV = () => {
+    if (filteredHistory.length === 0) {
+      alert('No order or bill records match your current filter.');
+      return;
+    }
+    const headers = ['Order/Bill Number', 'Record Type', 'Date & Time', 'Customer Name', 'Phone', 'Address', 'City', 'Payment Method', 'Payment Status', 'Order Status', 'Total Amount (INR)', 'Items Purchased'];
+    const rows = filteredHistory.map((o) => {
+      let itemsStr = '';
+      try {
+        const its = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
+        itemsStr = (its || []).map((it) => `${it.quantity}x ${it.title} (Rs. ${it.price})`).join('; ');
+      } catch (e) {
+        itemsStr = 'Items';
+      }
+      const isPos = (o.orderNumber || '').startsWith('SK-BILL') || (o.notes || '').includes('[Custom POS Bill]');
+      const typeLabel = isPos ? 'POS Counter Bill' : (o.paymentMethod === 'WHATSAPP' ? 'WhatsApp Order' : 'Web Store Order');
+      return [
+        `"${o.orderNumber}"`,
+        `"${typeLabel}"`,
+        `"${new Date(o.createdAt).toLocaleString('en-IN')}"`,
+        `"${(o.customerName || '').replace(/"/g, '""')}"`,
+        `"${o.customerPhone || ''}"`,
+        `"${(o.address || '').replace(/"/g, '""')}"`,
+        `"${(o.city || '').replace(/"/g, '""')}"`,
+        `"${o.paymentMethod || ''}"`,
+        `"${o.paymentStatus || 'PENDING'}"`,
+        `"${o.orderStatus || o.status || 'PENDING'}"`,
+        o.totalAmount,
+        `"${itemsStr.replace(/"/g, '""')}"`,
+      ].join(',');
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `SachiKheti_Past_Orders_Bills_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // ==========================================
   // WHATSAPP BAILEYS CONNECTION HANDLERS (SINGLE-DEVICE LIFECYCLE)
   // ==========================================
   const handleSyncWhatsApp = async () => {
@@ -1529,6 +1700,79 @@ export default function AdminPortalPage({ onNavigateHome }) {
     return matchesSearch && matchesStatus;
   });
 
+  // History & Past Bills Filtered List & KPI Metrics
+  const filteredHistory = orders.filter((o) => {
+    if (historySearch.trim()) {
+      const q = historySearch.toLowerCase().trim();
+      const matchNum = (o.orderNumber || '').toLowerCase().includes(q);
+      const matchCust = (o.customerName || '').toLowerCase().includes(q);
+      const matchPhone = (o.customerPhone || '').toLowerCase().includes(q);
+      const matchCity = (o.city || '').toLowerCase().includes(q);
+      let matchItem = false;
+      try {
+        const its = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
+        matchItem = (its || []).some((it) => (it.title || it.name || '').toLowerCase().includes(q));
+      } catch (e) {}
+      if (!matchNum && !matchCust && !matchPhone && !matchCity && !matchItem) return false;
+    }
+
+    const isPos = (o.orderNumber || '').startsWith('SK-BILL') || (o.notes || '').includes('[Custom POS Bill]');
+    const isWhatsapp = o.paymentMethod === 'WHATSAPP';
+    if (historyTypeFilter === 'pos' && !isPos) return false;
+    if (historyTypeFilter === 'whatsapp' && !isWhatsapp) return false;
+    if (historyTypeFilter === 'store' && (isPos || isWhatsapp)) return false;
+
+    if (historyPaymentStatusFilter !== 'all') {
+      const pStatus = (o.paymentStatus || 'PENDING').toUpperCase();
+      if (pStatus !== historyPaymentStatusFilter) return false;
+    }
+
+    if (historyPaymentMethodFilter !== 'all') {
+      if (o.paymentMethod !== historyPaymentMethodFilter) return false;
+    }
+
+    if (historyDatePreset !== 'all') {
+      const orderDate = new Date(o.createdAt);
+      const now = new Date();
+      if (historyDatePreset === 'today') {
+        if (orderDate.toDateString() !== now.toDateString()) return false;
+      } else if (historyDatePreset === 'yesterday') {
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        if (orderDate.toDateString() !== yesterday.toDateString()) return false;
+      } else if (historyDatePreset === '7days') {
+        const past7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        if (orderDate < past7) return false;
+      } else if (historyDatePreset === '30days') {
+        const past30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        if (orderDate < past30) return false;
+      }
+    }
+
+    return true;
+  }).sort((a, b) => {
+    if (historySort === 'oldest') {
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    } else if (historySort === 'highest') {
+      return (b.totalAmount || 0) - (a.totalAmount || 0);
+    } else if (historySort === 'lowest') {
+      return (a.totalAmount || 0) - (b.totalAmount || 0);
+    }
+    return new Date(b.createdAt) - new Date(a.createdAt);
+  });
+
+  const historyTotalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  const historyPaidRevenue = orders
+    .filter((o) => (o.paymentStatus || '').toUpperCase() === 'PAID')
+    .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  const historyPendingRevenue = orders
+    .filter((o) => (o.paymentStatus || '').toUpperCase() === 'PENDING')
+    .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  const historyPosBillsCount = orders.filter(
+    (o) => (o.orderNumber || '').startsWith('SK-BILL') || (o.notes || '').includes('[Custom POS Bill]')
+  ).length;
+  const historyStoreOrdersCount = orders.length - historyPosBillsCount;
+
   // KPI Metrics & Analytics Calculations (Real-time Database Synchronized)
   const totalRevenue = serverMetrics?.totalRevenue !== undefined
     ? serverMetrics.totalRevenue
@@ -1867,6 +2111,15 @@ export default function AdminPortalPage({ onNavigateHome }) {
               {pendingOrdersCount > 0 && (
                 <span className="admin-nav-badge-alert">{pendingOrdersCount}</span>
               )}
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('history'); setSidebarOpen(false); }}
+              className={`admin-nav-item ${activeTab === 'history' ? 'active' : ''}`}
+            >
+              <History size={18} />
+              <span>Past Orders & Bills</span>
+              <span className="admin-nav-badge">{orders.length}</span>
             </button>
 
             <div className="admin-nav-section-title" style={{ marginTop: '16px' }}>Catalog Management</div>
@@ -3347,10 +3600,21 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   <h1 className="admin-view-title">Order Fulfillment Center</h1>
                   <p className="admin-view-sub">Manage customer orders, create manual phone orders, update delivery status, and delete test records</p>
                 </div>
-                <button onClick={openAddOrderModal} className="btn btn-primary">
-                  <Plus size={16} />
-                  <span>Create Manual Order</span>
-                </button>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('history')}
+                    className="btn btn-secondary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <History size={16} />
+                    <span>Past Orders & Bills ({orders.length})</span>
+                  </button>
+                  <button onClick={openAddOrderModal} className="btn btn-primary">
+                    <Plus size={16} />
+                    <span>Create Manual Order</span>
+                  </button>
+                </div>
               </div>
 
               {/* Order Search & Filters */}
@@ -3491,6 +3755,629 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ==================================================== */}
+          {/* TAB: PAST ORDERS & BILLS HISTORY LEDGER              */}
+          {/* ==================================================== */}
+          {activeTab === 'history' && (
+            <div className="admin-tab-view">
+              <div className="admin-view-header">
+                <div>
+                  <h1 className="admin-view-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <History size={28} color="#15733E" />
+                    <span>Past Orders & Bills History</span>
+                  </h1>
+                  <p className="admin-view-sub">
+                    Complete financial ledger and audit log of all POS counter bills, cash memos, online store orders, and WhatsApp checkouts.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={exportHistoryToCSV}
+                    className="btn btn-secondary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    title="Export filtered records as CSV spreadsheet"
+                  >
+                    <Download size={16} />
+                    <span>Export CSV</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('customer-store')}
+                    className="btn btn-primary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Plus size={16} />
+                    <span>+ New POS Bill</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 4 KPI Summary Metric Cards */}
+              <div className="admin-kpi-grid" style={{ marginBottom: '22px' }}>
+                <div className="admin-kpi-card">
+                  <div className="admin-kpi-icon-wrap" style={{ background: '#EBF7EE', color: '#15733E' }}>
+                    <Receipt size={22} />
+                  </div>
+                  <div>
+                    <div className="admin-kpi-label">Total Bills & Orders</div>
+                    <div className="admin-kpi-value">{orders.length}</div>
+                    <div className="admin-kpi-trend" style={{ color: '#15733E' }}>
+                      ₹{historyTotalRevenue.toLocaleString('en-IN')} Lifetime Gross
+                    </div>
+                  </div>
+                </div>
+
+                <div className="admin-kpi-card">
+                  <div className="admin-kpi-icon-wrap" style={{ background: '#F0FDF4', color: '#16A34A' }}>
+                    <CheckCircle size={22} />
+                  </div>
+                  <div>
+                    <div className="admin-kpi-label">Paid / Settled Revenue</div>
+                    <div className="admin-kpi-value" style={{ color: '#16A34A' }}>
+                      ₹{historyPaidRevenue.toLocaleString('en-IN')}
+                    </div>
+                    <div className="admin-kpi-trend" style={{ color: '#6B7280' }}>
+                      {orders.filter((o) => (o.paymentStatus || '').toUpperCase() === 'PAID').length} Records Settled
+                    </div>
+                  </div>
+                </div>
+
+                <div className="admin-kpi-card">
+                  <div className="admin-kpi-icon-wrap" style={{ background: '#FEF3C7', color: '#D97706' }}>
+                    <Clock size={22} />
+                  </div>
+                  <div>
+                    <div className="admin-kpi-label">Payment Due / Khata</div>
+                    <div className="admin-kpi-value" style={{ color: '#D97706' }}>
+                      ₹{historyPendingRevenue.toLocaleString('en-IN')}
+                    </div>
+                    <div className="admin-kpi-trend" style={{ color: '#D97706' }}>
+                      {orders.filter((o) => (o.paymentStatus || '').toUpperCase() === 'PENDING').length} Unpaid / Credit
+                    </div>
+                  </div>
+                </div>
+
+                <div className="admin-kpi-card">
+                  <div className="admin-kpi-icon-wrap" style={{ background: '#EFF6FF', color: '#2563EB' }}>
+                    <Store size={22} />
+                  </div>
+                  <div>
+                    <div className="admin-kpi-label">POS vs Online Split</div>
+                    <div className="admin-kpi-value" style={{ fontSize: '1.25rem' }}>
+                      {historyPosBillsCount} POS • {historyStoreOrdersCount} Store
+                    </div>
+                    <div className="admin-kpi-trend" style={{ color: '#6B7280' }}>
+                      Omnichannel Sales Ledger
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Comprehensive Search & Multi-Filter Bar */}
+              <div
+                style={{
+                  background: '#FFFFFF',
+                  padding: '16px 20px',
+                  borderRadius: '14px',
+                  border: '1px solid #E5E7EB',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                  marginBottom: '20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                }}
+              >
+                {/* Search Row */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: '240px', position: 'relative' }}>
+                    <Search
+                      size={17}
+                      style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#7A8B80' }}
+                    />
+                    <input
+                      type="text"
+                      value={historySearch}
+                      onChange={(e) => setHistorySearch(e.target.value)}
+                      placeholder="Search by Bill #, Customer Name, Phone, City, or Product Item..."
+                      className="form-input"
+                      style={{ paddingLeft: '38px', margin: 0 }}
+                    />
+                    {historySearch && (
+                      <button
+                        onClick={() => setHistorySearch('')}
+                        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF' }}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+
+                  {/* View Mode Toggle (Table Ledger vs Cards) */}
+                  <div style={{ display: 'flex', background: '#F3F4F6', padding: '3px', borderRadius: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryViewMode('table')}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        background: historyViewMode === 'table' ? '#FFFFFF' : 'transparent',
+                        color: historyViewMode === 'table' ? '#111827' : '#6B7280',
+                        boxShadow: historyViewMode === 'table' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                      }}
+                    >
+                      Table Ledger
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryViewMode('cards')}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        background: historyViewMode === 'cards' ? '#FFFFFF' : 'transparent',
+                        color: historyViewMode === 'cards' ? '#111827' : '#6B7280',
+                        boxShadow: historyViewMode === 'cards' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                      }}
+                    >
+                      Receipt Cards
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter Controls Row */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', alignItems: 'center' }}>
+                  {/* Type Filter */}
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: '2px' }}>
+                      Record Type
+                    </label>
+                    <select
+                      value={historyTypeFilter}
+                      onChange={(e) => setHistoryTypeFilter(e.target.value)}
+                      className="form-select"
+                      style={{ margin: 0, padding: '6px 8px', fontSize: '0.82rem' }}
+                    >
+                      <option value="all">All Types ({orders.length})</option>
+                      <option value="pos">POS Counter Bills ({historyPosBillsCount})</option>
+                      <option value="store">Web Store Orders ({historyStoreOrdersCount})</option>
+                      <option value="whatsapp">WhatsApp Assisted Orders</option>
+                    </select>
+                  </div>
+
+                  {/* Payment Status Filter */}
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: '2px' }}>
+                      Payment Status
+                    </label>
+                    <select
+                      value={historyPaymentStatusFilter}
+                      onChange={(e) => setHistoryPaymentStatusFilter(e.target.value)}
+                      className="form-select"
+                      style={{ margin: 0, padding: '6px 8px', fontSize: '0.82rem' }}
+                    >
+                      <option value="all">All Payment Statuses</option>
+                      <option value="PAID">PAID / Settled</option>
+                      <option value="PENDING">PENDING / Due / Khata</option>
+                    </select>
+                  </div>
+
+                  {/* Payment Method Filter */}
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: '2px' }}>
+                      Payment Method
+                    </label>
+                    <select
+                      value={historyPaymentMethodFilter}
+                      onChange={(e) => setHistoryPaymentMethodFilter(e.target.value)}
+                      className="form-select"
+                      style={{ margin: 0, padding: '6px 8px', fontSize: '0.82rem' }}
+                    >
+                      <option value="all">All Payment Methods</option>
+                      <option value="CASH">Cash / COD</option>
+                      <option value="UPI">UPI / QR Code</option>
+                      <option value="BANK_TRANSFER">Bank Transfer / NEFT</option>
+                      <option value="RAZORPAY">Razorpay / Card</option>
+                      <option value="CREDIT">Khata / Credit</option>
+                      <option value="WHATSAPP">WhatsApp Order</option>
+                    </select>
+                  </div>
+
+                  {/* Date Preset */}
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: '2px' }}>
+                      Date Period
+                    </label>
+                    <select
+                      value={historyDatePreset}
+                      onChange={(e) => setHistoryDatePreset(e.target.value)}
+                      className="form-select"
+                      style={{ margin: 0, padding: '6px 8px', fontSize: '0.82rem' }}
+                    >
+                      <option value="all">All Time</option>
+                      <option value="today">Today</option>
+                      <option value="yesterday">Yesterday</option>
+                      <option value="7days">Last 7 Days</option>
+                      <option value="30days">Last 30 Days</option>
+                    </select>
+                  </div>
+
+                  {/* Sort By */}
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6B7280', display: 'block', marginBottom: '2px' }}>
+                      Sort Order
+                    </label>
+                    <select
+                      value={historySort}
+                      onChange={(e) => setHistorySort(e.target.value)}
+                      className="form-select"
+                      style={{ margin: 0, padding: '6px 8px', fontSize: '0.82rem' }}
+                    >
+                      <option value="newest">Newest First</option>
+                      <option value="oldest">Oldest First</option>
+                      <option value="highest">Highest Amount (₹)</option>
+                      <option value="lowest">Lowest Amount (₹)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Showing filtered count */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontSize: '0.82rem', color: '#6B7280', fontWeight: 600 }}>
+                  Showing <strong style={{ color: '#111827' }}>{filteredHistory.length}</strong> of {orders.length} past records
+                </span>
+                {(historySearch || historyTypeFilter !== 'all' || historyPaymentStatusFilter !== 'all' || historyPaymentMethodFilter !== 'all' || historyDatePreset !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHistorySearch('');
+                      setHistoryTypeFilter('all');
+                      setHistoryPaymentStatusFilter('all');
+                      setHistoryPaymentMethodFilter('all');
+                      setHistoryDatePreset('all');
+                    }}
+                    style={{ background: 'none', border: 'none', color: '#EF4444', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 700 }}
+                  >
+                    Reset All Filters
+                  </button>
+                )}
+              </div>
+
+              {/* TABLE VIEW */}
+              {historyViewMode === 'table' && (
+                <div className="admin-table-container">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th style={{ minWidth: '130px' }}>Bill / Order #</th>
+                        <th style={{ minWidth: '120px' }}>Date & Time</th>
+                        <th style={{ minWidth: '150px' }}>Customer</th>
+                        <th style={{ minWidth: '200px' }}>Items Purchased</th>
+                        <th style={{ minWidth: '110px' }}>Amount</th>
+                        <th style={{ minWidth: '140px' }}>Payment</th>
+                        <th style={{ minWidth: '130px' }}>Status</th>
+                        <th style={{ textAlign: 'right', minWidth: '160px' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredHistory.map((o) => {
+                        const isPos = (o.orderNumber || '').startsWith('SK-BILL') || (o.notes || '').includes('[Custom POS Bill]');
+                        let parsedItems = [];
+                        try {
+                          parsedItems = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
+                        } catch (e) {}
+
+                        return (
+                          <tr key={o.id}>
+                            {/* Bill / Order # */}
+                            <td>
+                              <div style={{ fontWeight: 800, color: '#111827', fontSize: '0.88rem' }}>
+                                {o.orderNumber}
+                              </div>
+                              <span
+                                className={`badge ${isPos ? 'badge-blue' : (o.paymentMethod === 'WHATSAPP' ? 'badge-green' : 'badge-gold')}`}
+                                style={{ fontSize: '0.68rem', padding: '1px 6px', marginTop: '2px', display: 'inline-block' }}
+                              >
+                                {isPos ? 'POS Bill' : (o.paymentMethod === 'WHATSAPP' ? 'WhatsApp' : 'Web Store')}
+                              </span>
+                            </td>
+
+                            {/* Date & Time */}
+                            <td>
+                              <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>
+                                {new Date(o.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </div>
+                              <div style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>
+                                {new Date(o.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            </td>
+
+                            {/* Customer */}
+                            <td>
+                              <div style={{ fontWeight: 700, color: '#111827', fontSize: '0.85rem' }}>
+                                {o.customerName}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#15733E', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Phone size={11} />
+                                <a href={`tel:${o.customerPhone}`} style={{ color: '#15733E', textDecoration: 'none' }}>
+                                  {o.customerPhone}
+                                </a>
+                              </div>
+                              {o.city && (
+                                <div style={{ fontSize: '0.72rem', color: '#6B7280' }}>
+                                  📍 {o.city}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Items Purchased */}
+                            <td>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '240px' }}>
+                                {(parsedItems || []).slice(0, 2).map((it, idx) => (
+                                  <div key={idx} style={{ fontSize: '0.78rem', color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    <strong style={{ color: '#15733E' }}>{it.quantity}x</strong> {it.title}
+                                  </div>
+                                ))}
+                                {(parsedItems || []).length > 2 && (
+                                  <span style={{ fontSize: '0.7rem', color: '#6B7280', fontStyle: 'italic' }}>
+                                    + {(parsedItems.length - 2)} more items
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Total Amount */}
+                            <td>
+                              <div style={{ fontWeight: 900, color: '#15733E', fontSize: '0.96rem' }}>
+                                ₹{o.totalAmount.toLocaleString('en-IN')}
+                              </div>
+                            </td>
+
+                            {/* Payment Method & Status (Clickable Toggle) */}
+                            <td>
+                              <div style={{ fontSize: '0.76rem', fontWeight: 600, color: '#4B5563', marginBottom: '3px' }}>
+                                {o.paymentMethod}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePaymentStatus(o.id, (o.paymentStatus || 'PENDING').toUpperCase())}
+                                className={`badge ${(o.paymentStatus || '').toUpperCase() === 'PAID' ? 'badge-green' : 'badge-gold'}`}
+                                style={{
+                                  fontSize: '0.72rem',
+                                  padding: '2px 8px',
+                                  cursor: 'pointer',
+                                  border: 'none',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontWeight: 700,
+                                }}
+                                title="Click to toggle Paid / Pending"
+                              >
+                                {(o.paymentStatus || '').toUpperCase() === 'PAID' ? '✓ PAID' : '⏳ PENDING'}
+                              </button>
+                            </td>
+
+                            {/* Fulfillment Status Dropdown */}
+                            <td>
+                              <select
+                                value={o.orderStatus || o.status || 'PENDING'}
+                                onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
+                                className="form-select admin-order-status-select"
+                                style={{ margin: 0, padding: '4px 6px', fontSize: '0.78rem' }}
+                              >
+                                <option value="PENDING">Pending</option>
+                                <option value="CONFIRMED">Confirmed</option>
+                                <option value="PROCESSING">Processing</option>
+                                <option value="SHIPPED">Shipped</option>
+                                <option value="DELIVERED">Delivered</option>
+                                <option value="CANCELLED">Cancelled</option>
+                              </select>
+                            </td>
+
+                            {/* Actions */}
+                            <td style={{ textAlign: 'right' }}>
+                              <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleViewPastBill(o)}
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ padding: '5px 8px', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                  title="View & Print Official Tax Invoice"
+                                >
+                                  <Receipt size={13} color="#15733E" />
+                                  <span>Bill</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleWhatsAppPastBill(o)}
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ padding: '5px 8px', fontSize: '0.76rem', color: '#16A34A', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                  title="Send Bill to Customer on WhatsApp"
+                                >
+                                  <Send size={13} />
+                                  <span>WA</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openEditOrderModal(o)}
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ padding: '5px 7px' }}
+                                  title="Edit Order / Bill Record"
+                                >
+                                  <Edit size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteOrder(o.id, o.orderNumber)}
+                                  className="btn btn-secondary btn-sm text-red"
+                                  style={{ padding: '5px 7px' }}
+                                  title="Permanently Delete Record"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* CARDS VIEW */}
+              {historyViewMode === 'cards' && (
+                <div className="admin-orders-grid">
+                  {filteredHistory.map((o) => {
+                    const isPos = (o.orderNumber || '').startsWith('SK-BILL') || (o.notes || '').includes('[Custom POS Bill]');
+                    let parsedItems = [];
+                    try {
+                      parsedItems = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
+                    } catch (e) {}
+
+                    return (
+                      <div key={o.id} className="admin-order-card">
+                        <div className="admin-order-card-header">
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div className="admin-order-id">{o.orderNumber}</div>
+                              <span className={`badge ${isPos ? 'badge-blue' : 'badge-gold'}`} style={{ fontSize: '0.68rem', padding: '1px 5px' }}>
+                                {isPos ? 'POS Bill' : 'Web Store'}
+                              </span>
+                            </div>
+                            <div className="admin-order-date">
+                              <Calendar size={13} />
+                              <span>{new Date(o.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div className="admin-order-amount">₹{o.totalAmount.toLocaleString('en-IN')}</div>
+                            <span className={`badge ${(o.paymentStatus || '').toUpperCase() === 'PAID' ? 'badge-green' : 'badge-gold'}`} style={{ fontSize: '0.72rem' }}>
+                              {o.paymentMethod} • {(o.paymentStatus || '').toUpperCase() === 'PAID' ? 'PAID' : 'DUE'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="admin-order-customer-box">
+                          <div className="admin-order-customer-name">{o.customerName}</div>
+                          <div className="admin-order-customer-detail">
+                            <Phone size={14} color="#15733E" />
+                            <a href={`tel:${o.customerPhone}`} style={{ color: '#15733E', textDecoration: 'underline' }}>
+                              {o.customerPhone}
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => handleWhatsAppPastBill(o)}
+                              className="btn btn-secondary btn-sm"
+                              style={{ padding: '2px 8px', fontSize: '0.75rem', marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#16A34A' }}
+                            >
+                              <Send size={12} />
+                              <span>Send WA Bill</span>
+                            </button>
+                          </div>
+                          {o.address && (
+                            <div className="admin-order-customer-detail">
+                              <MapPin size={14} color="#7A8B80" />
+                              <span>{o.address}, {o.city}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="admin-order-items-list">
+                          <div className="admin-order-items-title">Purchased Items:</div>
+                          {(parsedItems || []).map((item, idx) => (
+                            <div key={idx} className="admin-order-item-row">
+                              <span><strong>{item.quantity}x</strong> {item.title}</span>
+                              <span>₹{(item.price * item.quantity).toLocaleString('en-IN')}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="admin-order-status-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>Status:</span>
+                            <select
+                              value={o.orderStatus || o.status}
+                              onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
+                              className="form-select admin-order-status-select"
+                              style={{ fontSize: '0.78rem', padding: '3px 6px' }}
+                            >
+                              <option value="PENDING">Pending</option>
+                              <option value="CONFIRMED">Confirmed</option>
+                              <option value="PROCESSING">Processing</option>
+                              <option value="SHIPPED">Shipped</option>
+                              <option value="DELIVERED">Delivered</option>
+                              <option value="CANCELLED">Cancelled</option>
+                            </select>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleViewPastBill(o)}
+                              className="btn btn-secondary btn-sm"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              <Receipt size={13} color="#15733E" />
+                              <span>Print Bill</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openEditOrderModal(o)}
+                              className="btn btn-secondary btn-sm"
+                            >
+                              <Edit size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOrder(o.id, o.orderNumber)}
+                              className="btn btn-secondary btn-sm text-red"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Empty Search/Filter State */}
+              {filteredHistory.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '60px 20px', background: '#FFFFFF', borderRadius: '14px', border: '1px solid #E5E7EB', marginTop: '16px' }}>
+                  <History size={40} color="#9CA3AF" style={{ margin: '0 auto 12px' }} />
+                  <h3 style={{ fontSize: '1.2rem', color: '#111827', marginBottom: '6px' }}>No Orders or Bills Match Your Search</h3>
+                  <p style={{ color: '#6B7280', fontSize: '0.88rem', maxWidth: '420px', margin: '0 auto 14px' }}>
+                    Try searching with another keyword or reset the filter criteria to see all historical records.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHistorySearch('');
+                      setHistoryTypeFilter('all');
+                      setHistoryPaymentStatusFilter('all');
+                      setHistoryPaymentMethodFilter('all');
+                      setHistoryDatePreset('all');
+                    }}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    Reset All Filters
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
