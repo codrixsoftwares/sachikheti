@@ -2220,12 +2220,12 @@ export default function AdminPortalPage({ onNavigateHome }) {
                 </div>
 
                 <input
-                  type="url"
+                  type="text"
                   required
                   value={productForm.imageUrl}
                   onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
                   className="form-input"
-                  placeholder="https://... (or auto-filled when uploading above)"
+                  placeholder="Image URL (auto-filled on upload above)"
                 />
               </div>
 
@@ -2426,8 +2426,8 @@ export default function AdminPortalPage({ onNavigateHome }) {
                 </div>
 
                 <input
-                  type="url"
-                  placeholder="https://... (or auto-filled when uploading above)"
+                  type="text"
+                  placeholder="Image URL (auto-filled on upload above)"
                   value={categoryForm.imageUrl}
                   onChange={(e) => setCategoryForm({ ...categoryForm, imageUrl: e.target.value })}
                   className="form-input"

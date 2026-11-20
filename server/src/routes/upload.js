@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createClient } from '@supabase/supabase-js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -13,7 +14,17 @@ if (!fs.existsSync(uploadBaseDir)) {
   fs.mkdirSync(uploadBaseDir, { recursive: true });
 }
 
-// POST /api/upload - Accepts base64 image and saves locally as resilient fallback
+// Instantiate Supabase Admin Client using Secret Key for 100% RLS bypass
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.SUPABASE_URL || 'https://uuklvqlwrxvnacbnsyve.supabase.co';
+  const supabaseSecret = process.env.SUPABASE_SECRET_KEY;
+  if (!supabaseUrl || !supabaseSecret) return null;
+  return createClient(supabaseUrl, supabaseSecret, {
+    auth: { persistSession: false },
+  });
+}
+
+// POST /api/upload - Accepts base64 image, uploads to Supabase CDN (with admin bypass) + local disk backup
 router.post('/', async (req, res) => {
   try {
     const { image, filename = 'image.jpg', folder = 'products' } = req.body;
@@ -36,12 +47,13 @@ router.post('/', async (req, res) => {
     // Extract base64 payload & extension
     let base64Data = image;
     let extension = 'jpg';
+    let mimeType = 'image/jpeg';
 
     if (image.includes(';base64,')) {
       const parts = image.split(';base64,');
       const mimeMatch = parts[0].match(/:(.*?)$/);
       if (mimeMatch && mimeMatch[1]) {
-        const mimeType = mimeMatch[1];
+        mimeType = mimeMatch[1];
         if (mimeType.includes('png')) extension = 'png';
         else if (mimeType.includes('webp')) extension = 'webp';
         else if (mimeType.includes('gif')) extension = 'gif';
@@ -63,14 +75,47 @@ router.post('/', async (req, res) => {
     const buffer = Buffer.from(base64Data, 'base64');
     fs.writeFileSync(filePath, buffer);
 
-    const publicUrl = `/uploads/${safeFolder}/${finalFilename}`;
+    const localUrl = `/uploads/${safeFolder}/${finalFilename}`;
+    let finalUrl = localUrl;
+    let storageProvider = 'local';
+
+    // 1. Upload directly to Supabase Storage CDN via Secret Key
+    const supabaseAdmin = getSupabaseAdmin();
+    const supabaseBucket = process.env.SUPABASE_BUCKET || 'SachiKeti';
+    if (supabaseAdmin) {
+      try {
+        const storagePath = `${safeFolder}/${finalFilename}`;
+        const { data, error } = await supabaseAdmin.storage
+          .from(supabaseBucket)
+          .upload(storagePath, buffer, {
+            contentType: mimeType,
+            upsert: true,
+          });
+
+        if (!error && data) {
+          const { data: urlData } = supabaseAdmin.storage
+            .from(supabaseBucket)
+            .getPublicUrl(data.path);
+          if (urlData?.publicUrl) {
+            finalUrl = urlData.publicUrl;
+            storageProvider = 'supabase';
+          }
+        } else if (error) {
+          console.warn(`[Supabase Admin Upload Warning]: ${error.message}. Serving local URL.`);
+        }
+      } catch (sbErr) {
+        console.warn(`[Supabase Admin Exception]: ${sbErr.message}. Serving local URL.`);
+      }
+    }
 
     return res.status(201).json({
       success: true,
       statusCode: 201,
-      message: 'Image uploaded successfully to server storage.',
-      url: publicUrl,
-      path: publicUrl,
+      message: `Image uploaded successfully via ${storageProvider}.`,
+      url: finalUrl,
+      path: finalUrl,
+      localUrl,
+      storageProvider,
       filename: finalFilename,
       size: buffer.length,
     });
@@ -79,7 +124,7 @@ router.post('/', async (req, res) => {
     return res.status(500).json({
       success: false,
       statusCode: 500,
-      message: 'Failed to save uploaded image on server.',
+      message: 'Failed to save uploaded image.',
       error: error.message,
     });
   }

@@ -1130,8 +1130,8 @@ export default function AdminDashboard({ onClose }) {
                   </div>
 
                   <input
-                    type="url"
-                    placeholder="https://... (CDN image URL auto-filled on upload above)"
+                    type="text"
+                    placeholder="Image URL (auto-filled on upload above)"
                     value={productForm.imageUrl}
                     onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
                     className="form-input"
@@ -1328,8 +1328,8 @@ export default function AdminDashboard({ onClose }) {
                   </div>
 
                   <input
-                    type="url"
-                    placeholder="https://... (or auto-filled when uploading above)"
+                    type="text"
+                    placeholder="Image URL (auto-filled on upload above)"
                     value={catalogForm.imageUrl}
                     onChange={(e) => setCatalogForm({ ...catalogForm, imageUrl: e.target.value })}
                     className="form-input"

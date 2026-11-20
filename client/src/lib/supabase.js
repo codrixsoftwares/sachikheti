@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 // Default project details from your Supabase dashboard
 export const DEFAULT_SUPABASE_URL = 'https://uuklvqlwrxvnacbnsyve.supabase.co';
-export const DEFAULT_SUPABASE_BUCKET = 'sachikheti-media';
+export const DEFAULT_SUPABASE_BUCKET = 'SachiKeti';
 
 /**
  * Helper to convert browser File object to base64 Data URL
@@ -37,12 +37,17 @@ export async function uploadToServer(file, folder = 'products') {
 
     const data = await res.json();
     if (res.ok && data.success) {
+      const publicUrl = data.url?.startsWith('http')
+        ? data.url
+        : `${window.location.origin}${data.url}`;
       return {
         success: true,
-        url: data.url,
-        path: data.path,
-        isLocalFallback: true,
-        message: 'Saved to local server storage.',
+        url: publicUrl,
+        path: publicUrl,
+        isLocalFallback: data.storageProvider !== 'supabase',
+        message: data.storageProvider === 'supabase'
+          ? 'Uploaded to Supabase CDN successfully!'
+          : 'Saved to local server storage.',
       };
     }
 
@@ -74,10 +79,18 @@ export function getSupabaseConfig() {
     import.meta.env.VITE_SUPABASE_ANON_KEY ||
     '';
 
-  const bucket =
+  let bucket =
     localStorage.getItem('sachikheti_supabase_bucket') ||
     import.meta.env.VITE_SUPABASE_BUCKET ||
     DEFAULT_SUPABASE_BUCKET;
+
+  // Auto-upgrade legacy bucket name to active Supabase bucket
+  if (bucket === 'sachikheti-media') {
+    bucket = 'SachiKeti';
+    try {
+      localStorage.setItem('sachikheti_supabase_bucket', 'SachiKeti');
+    } catch (e) {}
+  }
 
   return {
     url: url.trim(),
