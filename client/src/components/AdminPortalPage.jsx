@@ -490,7 +490,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
           ? productForm.titlePunjabi.trim()
           : productForm.title.trim(),
         categoryId: productForm.categoryId,
-        price: parseFloat(productForm.price),
+        price: parseFloat(String(productForm.price || '0').replace(/[^0-9.]/g, '')) || 0,
         unit: productForm.unit.trim() || '1 kg',
         imageUrl: productForm.imageUrl.trim() || 'https://images.unsplash.com/photo-1592982537447-7440770cbfc9?auto=format&fit=crop&w=800&q=80',
         description: productForm.description.trim(),
@@ -2276,10 +2276,29 @@ export default function AdminPortalPage({ onNavigateHome }) {
         <div className="modal-overlay" style={{ zIndex: 600 }}>
           <div
             className="modal-content"
-            style={{ maxWidth: '680px', maxHeight: '90vh', overflowY: 'auto' }}
+            style={{
+              maxWidth: '700px',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: 0,
+              overflow: 'hidden',
+              borderRadius: '16px',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            {/* Modal Header */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '18px 24px 14px',
+                borderBottom: '1px solid #E5E7EB',
+                background: '#FFFFFF',
+                flexShrink: 0,
+              }}
+            >
               <div>
                 <h3 style={{ fontSize: '1.35rem', fontWeight: 800, margin: 0, color: '#1B2E23' }}>
                   {editingProduct ? 'Edit Agricultural Product' : 'Add New Agricultural Product'}
@@ -2293,17 +2312,34 @@ export default function AdminPortalPage({ onNavigateHome }) {
               </button>
             </div>
 
-            {/* Product Type Quick Switcher */}
-            <div
+            <form
+              onSubmit={handleSaveProduct}
               style={{
                 display: 'flex',
-                gap: '8px',
-                marginBottom: '18px',
-                background: '#F1F5F2',
-                padding: '4px',
-                borderRadius: '10px',
+                flexDirection: 'column',
+                flex: 1,
+                overflow: 'hidden',
+                margin: 0,
               }}
             >
+              <div
+                style={{
+                  padding: '20px 24px',
+                  overflowY: 'auto',
+                  flex: 1,
+                }}
+              >
+                {/* Product Type Quick Switcher */}
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '8px',
+                    marginBottom: '18px',
+                    background: '#F1F5F2',
+                    padding: '4px',
+                    borderRadius: '10px',
+                  }}
+                >
               <button
                 type="button"
                 onClick={() => {
@@ -2370,7 +2406,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
               </button>
             </div>
 
-            <form onSubmit={handleSaveProduct}>
               {/* Product Titles: English & Punjabi */}
               <div className="checkout-grid-2col">
                 <div className="form-group">
@@ -2798,9 +2833,24 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   }
                 />
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
+            {/* Sticky Action Footer */}
+            <div
+              style={{
+                padding: '14px 24px',
+                borderTop: '1px solid #E5E7EB',
+                background: '#F9FAFB',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <div style={{ fontSize: '0.8rem', color: '#7A8B80' }}>
+                {editingProduct ? '⚡ Real-time socket sync active' : '🌾 Instant storefront visibility'}
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
                 <button
                   type="button"
                   onClick={() => setShowProductModal(false)}
@@ -2826,203 +2876,260 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   )}
                 </button>
               </div>
-            </form>
-          </div>
+            </div>
+          </form>
         </div>
-      )}
+      </div>
+    )}
 
       {/* ==================================================== */}
       {/* ADD / EDIT CATEGORY MODAL                            */}
       {/* ==================================================== */}
       {showCategoryModal && (
         <div className="modal-overlay" style={{ zIndex: 600 }}>
-          <div className="modal-content" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div
+            className="modal-content"
+            style={{
+              maxWidth: '560px',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: 0,
+              overflow: 'hidden',
+              borderRadius: '16px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '18px 24px 14px',
+                borderBottom: '1px solid #E5E7EB',
+                background: '#FFFFFF',
+                flexShrink: 0,
+              }}
+            >
               <div>
-                <h3 style={{ fontSize: '1.4rem', fontWeight: 800 }}>
+                <h3 style={{ fontSize: '1.35rem', fontWeight: 800, margin: 0, color: '#1B2E23' }}>
                   {editingCategory ? 'Edit Category' : 'Create New Category'}
                 </h3>
-                <p style={{ fontSize: '0.85rem', color: '#7A8B80' }}>
+                <p style={{ fontSize: '0.82rem', color: '#7A8B80', margin: '4px 0 0 0' }}>
                   Categories automatically appear in the storefront navbar and product filters.
                 </p>
               </div>
-              <button onClick={() => setShowCategoryModal(false)} className="modal-close-btn">
+              <button onClick={() => setShowCategoryModal(false)} className="modal-close-btn" type="button">
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveCategory}>
-              <div className="form-group">
-                <label className="form-label">Category Name (English) *</label>
-                <input
-                  type="text"
-                  required
-                  value={categoryForm.name}
-                  onChange={handleCategoryNameChange}
-                  className="form-input"
-                  placeholder="e.g. Cold Pressed Oils, Organic Pulses"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Category Name (Punjabi / Gurmukhi)</label>
-                <input
-                  type="text"
-                  value={categoryForm.namePunjabi}
-                  onChange={(e) => setCategoryForm({ ...categoryForm, namePunjabi: e.target.value })}
-                  className="form-input font-gurmukhi"
-                  placeholder="e.g. ਸ਼ੁੱਧ ਡੇਅਰੀ, ਸਰ੍ਹੋਂ ਦਾ ਤੇਲ"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Catalog Image (Supabase CDN)</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowSupabaseModal(true)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: supabaseConfig.isConfigured ? '#15733E' : '#B46F00',
-                      fontSize: '0.76rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    <Database size={12} />
-                    {supabaseConfig.isConfigured ? 'Supabase CDN Active' : '⚡ Connect Supabase'}
-                  </button>
-                </label>
-
-                {/* Supabase Upload Zone */}
-                <div
-                  style={{
-                    border: '2px dashed rgba(21, 115, 62, 0.25)',
-                    borderRadius: '12px',
-                    padding: '14px',
-                    background: '#FAF9F3',
-                    marginBottom: '10px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                    {categoryForm.imageUrl && (
-                      <img
-                        src={categoryForm.imageUrl}
-                        alt="Catalog preview"
-                        style={{
-                          width: '56px',
-                          height: '56px',
-                          objectFit: 'cover',
-                          borderRadius: '8px',
-                          border: '2px solid #15733E',
-                          flexShrink: 0,
-                        }}
-                      />
-                    )}
-                    <div style={{ textAlign: 'left', flex: 1 }}>
-                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <label
-                          className="btn btn-secondary btn-sm"
-                          style={{
-                            cursor: uploadingCategoryImg ? 'not-allowed' : 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            opacity: uploadingCategoryImg ? 0.6 : 1,
-                          }}
-                        >
-                          <UploadCloud size={16} color="#15733E" />
-                          <span>{uploadingCategoryImg ? 'Uploading...' : 'Upload Image to Supabase'}</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleUploadCategoryImg}
-                            disabled={uploadingCategoryImg}
-                            style={{ display: 'none' }}
-                          />
-                        </label>
-                      </div>
-
-                      {categoryUploadStatus && (
-                        <div
-                          style={{
-                            fontSize: '0.78rem',
-                            marginTop: '6px',
-                            fontWeight: 600,
-                            color: categoryUploadStatus.includes('Error') || categoryUploadStatus.includes('failed') ? '#DC2626' : '#15733E',
-                          }}
-                        >
-                          {categoryUploadStatus}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+            <form
+              onSubmit={handleSaveCategory}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                flex: 1,
+                overflow: 'hidden',
+                margin: 0,
+              }}
+            >
+              <div
+                style={{
+                  padding: '20px 24px',
+                  overflowY: 'auto',
+                  flex: 1,
+                }}
+              >
+                <div className="form-group">
+                  <label className="form-label">Category Name (English) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={categoryForm.name}
+                    onChange={handleCategoryNameChange}
+                    className="form-input"
+                    placeholder="e.g. Cold Pressed Oils, Organic Pulses"
+                  />
                 </div>
 
-                <input
-                  type="text"
-                  placeholder="Image URL (auto-filled on upload above)"
-                  value={categoryForm.imageUrl}
-                  onChange={(e) => setCategoryForm({ ...categoryForm, imageUrl: e.target.value })}
-                  className="form-input"
-                />
+                <div className="form-group">
+                  <label className="form-label">Category Name (Punjabi / Gurmukhi)</label>
+                  <input
+                    type="text"
+                    value={categoryForm.namePunjabi}
+                    onChange={(e) => setCategoryForm({ ...categoryForm, namePunjabi: e.target.value })}
+                    className="form-input font-gurmukhi"
+                    placeholder="e.g. ਸ਼ੁੱਧ ਡੇਅਰੀ, ਸਰ੍ਹੋਂ ਦਾ ਤੇਲ"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Catalog Image (Supabase CDN)</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowSupabaseModal(true)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: supabaseConfig.isConfigured ? '#15733E' : '#B46F00',
+                        fontSize: '0.76rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <Database size={12} />
+                      {supabaseConfig.isConfigured ? 'Supabase CDN Active' : '⚡ Connect Supabase'}
+                    </button>
+                  </label>
+
+                  {/* Supabase Upload Zone */}
+                  <div
+                    style={{
+                      border: '2px dashed rgba(21, 115, 62, 0.25)',
+                      borderRadius: '12px',
+                      padding: '14px',
+                      background: '#FAF9F3',
+                      marginBottom: '10px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                      {categoryForm.imageUrl && (
+                        <img
+                          src={categoryForm.imageUrl}
+                          alt="Catalog preview"
+                          style={{
+                            width: '56px',
+                            height: '56px',
+                            objectFit: 'cover',
+                            borderRadius: '8px',
+                            border: '2px solid #15733E',
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
+                      <div style={{ textAlign: 'left', flex: 1 }}>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <label
+                            className="btn btn-secondary btn-sm"
+                            style={{
+                              cursor: uploadingCategoryImg ? 'not-allowed' : 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              opacity: uploadingCategoryImg ? 0.6 : 1,
+                            }}
+                          >
+                            <UploadCloud size={16} color="#15733E" />
+                            <span>{uploadingCategoryImg ? 'Uploading...' : 'Upload Image to Supabase'}</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleUploadCategoryImg}
+                              disabled={uploadingCategoryImg}
+                              style={{ display: 'none' }}
+                            />
+                          </label>
+                        </div>
+
+                        {categoryUploadStatus && (
+                          <div
+                            style={{
+                              fontSize: '0.78rem',
+                              marginTop: '6px',
+                              fontWeight: 600,
+                              color: categoryUploadStatus.includes('Error') || categoryUploadStatus.includes('failed') ? '#DC2626' : '#15733E',
+                            }}
+                          >
+                            {categoryUploadStatus}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <input
+                    type="text"
+                    placeholder="Image URL (auto-filled on upload above)"
+                    value={categoryForm.imageUrl}
+                    onChange={(e) => setCategoryForm({ ...categoryForm, imageUrl: e.target.value })}
+                    className="form-input"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">URL Slug *</label>
+                  <input
+                    type="text"
+                    required
+                    value={categoryForm.slug}
+                    onChange={(e) => setCategoryForm({ ...categoryForm, slug: slugify(e.target.value) })}
+                    className="form-input"
+                    placeholder="e.g. cold-pressed-oils"
+                  />
+                  <span style={{ fontSize: '0.78rem', color: '#7A8B80', display: 'block', marginTop: '4px' }}>
+                    Used in URL navigation, e.g. /#catalog?category={categoryForm.slug || 'category-name'}
+                  </span>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Description (Optional)</label>
+                  <textarea
+                    rows={2}
+                    value={categoryForm.description}
+                    onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
+                    className="form-textarea"
+                    placeholder="Short description of this product grouping..."
+                  />
+                </div>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">URL Slug *</label>
-                <input
-                  type="text"
-                  required
-                  value={categoryForm.slug}
-                  onChange={(e) => setCategoryForm({ ...categoryForm, slug: slugify(e.target.value) })}
-                  className="form-input"
-                  placeholder="e.g. cold-pressed-oils"
-                />
-                <span style={{ fontSize: '0.78rem', color: '#7A8B80', display: 'block', marginTop: '4px' }}>
-                  Used in URL navigation, e.g. /#catalog?category={categoryForm.slug || 'category-name'}
-                </span>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Description (Optional)</label>
-                <textarea
-                  rows={2}
-                  value={categoryForm.description}
-                  onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
-                  className="form-textarea"
-                  placeholder="Short description of this product grouping..."
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowCategoryModal(false)}
-                  className="btn btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingCategory}
-                  className="btn btn-primary"
-                >
-                  {savingCategory ? (
-                    <>
-                      <RefreshCw size={16} className="spin" />
-                      <span>Saving Category...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle size={16} />
-                      <span>{editingCategory ? 'Update Category' : 'Save Category'}</span>
-                    </>
-                  )}
-                </button>
+              {/* Sticky Action Footer */}
+              <div
+                style={{
+                  padding: '14px 24px',
+                  borderTop: '1px solid #E5E7EB',
+                  background: '#F9FAFB',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{ fontSize: '0.8rem', color: '#7A8B80' }}>
+                  {editingCategory ? 'Category updates sync in real time' : 'New category available immediately'}
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowCategoryModal(false)}
+                    className="btn btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingCategory}
+                    className="btn btn-primary"
+                  >
+                    {savingCategory ? (
+                      <>
+                        <RefreshCw size={16} className="spin" />
+                        <span>Saving Category...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle size={16} />
+                        <span>{editingCategory ? 'Update Category' : 'Save Category'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -3280,7 +3387,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   Supabase Project URL
                 </label>
                 <input
-                  type="url"
+                  type="text"
                   value={supabaseForm.url}
                   onChange={(e) => setSupabaseForm({ ...supabaseForm, url: e.target.value })}
                   className="form-input"

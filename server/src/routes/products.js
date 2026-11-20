@@ -5,6 +5,14 @@ import { broadcastRealtimeUpdate } from '../lib/broadcast.js';
 
 const router = express.Router();
 
+// Helper to sanitize formatted price strings (e.g. "₹2,500", "2,500", "450")
+function sanitizePrice(val) {
+  if (val === null || val === undefined) return 0;
+  const clean = String(val).replace(/[^0-9.]/g, '');
+  const parsed = parseFloat(clean);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 // GET /api/products
 router.get('/', async (req, res) => {
   try {
@@ -90,7 +98,7 @@ router.post('/', verifyAdminToken, async (req, res) => {
         title,
         titlePunjabi: titlePunjabi || title,
         description: description || '',
-        price: parseFloat(price),
+        price: sanitizePrice(price),
         unit: unit || 'Unit',
         imageUrl: imageUrl || 'https://images.unsplash.com/photo-1592982537447-7440770cbfc9?auto=format&fit=crop&w=800&q=80',
         categoryId,
@@ -103,15 +111,19 @@ router.post('/', verifyAdminToken, async (req, res) => {
     });
 
     // Real-time WebSocket IO Broadcast with Live Overview Metrics
-    const io = req.app.get('io');
-    if (io) {
-      await broadcastRealtimeUpdate(io, 'products:updated', { action: 'create', product: newProduct });
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        await broadcastRealtimeUpdate(io, 'products:updated', { action: 'create', product: newProduct });
+      }
+    } catch (ioErr) {
+      console.warn('Socket broadcast warning:', ioErr.message);
     }
 
     res.status(201).json({ success: true, message: 'Product created successfully', data: newProduct });
   } catch (error) {
     console.error('Create product error:', error);
-    res.status(500).json({ success: false, message: 'Failed to create product' });
+    res.status(500).json({ success: false, message: error.message || 'Failed to create product' });
   }
 });
 
@@ -137,7 +149,7 @@ router.put('/:id', verifyAdminToken, async (req, res) => {
     if (title !== undefined) updateData.title = title;
     if (titlePunjabi !== undefined) updateData.titlePunjabi = titlePunjabi;
     if (description !== undefined) updateData.description = description;
-    if (price !== undefined) updateData.price = parseFloat(price);
+    if (price !== undefined) updateData.price = sanitizePrice(price);
     if (unit !== undefined) updateData.unit = unit;
     if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
     if (categoryId !== undefined) updateData.categoryId = categoryId;
@@ -155,15 +167,19 @@ router.put('/:id', verifyAdminToken, async (req, res) => {
     });
 
     // Real-time WebSocket IO Broadcast with Live Overview Metrics
-    const io = req.app.get('io');
-    if (io) {
-      await broadcastRealtimeUpdate(io, 'products:updated', { action: 'update', product: updated });
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        await broadcastRealtimeUpdate(io, 'products:updated', { action: 'update', product: updated });
+      }
+    } catch (ioErr) {
+      console.warn('Socket broadcast warning:', ioErr.message);
     }
 
     res.json({ success: true, message: 'Product updated successfully', data: updated });
   } catch (error) {
     console.error('Update product error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update product' });
+    res.status(500).json({ success: false, message: error.message || 'Failed to update product' });
   }
 });
 

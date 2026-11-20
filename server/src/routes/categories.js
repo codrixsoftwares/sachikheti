@@ -7,12 +7,13 @@ const router = express.Router();
 
 // Helper to generate URL-safe slug
 function generateSlug(name) {
-  return name
+  const ascii = (name || '')
     .toLowerCase()
     .trim()
     .replace(/[^\w\s-]/g, '')
     .replace(/[\s_-]+/g, '-')
     .replace(/^-+|-+$/g, '');
+  return ascii || `category-${Date.now().toString().slice(-6)}`;
 }
 
 // GET /api/categories - public
@@ -42,16 +43,16 @@ router.post('/', verifyAdminToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Category name is required' });
     }
 
-    const finalSlug = (slug && slug.trim()) ? slug.trim().toLowerCase() : generateSlug(name);
+    let finalSlug = (slug && slug.trim()) ? slug.trim().toLowerCase() : generateSlug(name);
+    if (!finalSlug) finalSlug = generateSlug(name);
 
-    // Check if slug already exists
-    const existing = await prisma.category.findUnique({
-      where: { slug: finalSlug }
-    });
-
-    if (existing) {
-      return res.status(400).json({ success: false, message: `Category with slug "${finalSlug}" already exists.` });
+    // Auto-resolve any slug collision by appending a counter
+    let candidateSlug = finalSlug;
+    let counter = 1;
+    while (await prisma.category.findUnique({ where: { slug: candidateSlug } })) {
+      candidateSlug = `${finalSlug}-${counter++}`;
     }
+    finalSlug = candidateSlug;
 
     let newCategory;
     try {
@@ -90,16 +91,20 @@ router.post('/', verifyAdminToken, async (req, res) => {
     }
 
     // Real-time WebSocket IO Broadcast with Live Overview Metrics
-    const io = req.app.get('io');
-    if (io) {
-      await broadcastRealtimeUpdate(io, 'categories:updated', { action: 'create', category: newCategory });
-      io.emit('catalogs:updated', { action: 'create', category: newCategory });
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        await broadcastRealtimeUpdate(io, 'categories:updated', { action: 'create', category: newCategory });
+        io.emit('catalogs:updated', { action: 'create', category: newCategory });
+      }
+    } catch (ioErr) {
+      console.warn('Socket broadcast warning:', ioErr.message);
     }
 
     res.status(201).json({ success: true, message: 'Category created successfully', data: newCategory });
   } catch (error) {
     console.error('Create category error:', error);
-    res.status(500).json({ success: false, message: 'Failed to create category' });
+    res.status(500).json({ success: false, message: error.message || 'Failed to create category' });
   }
 });
 
@@ -111,12 +116,20 @@ router.put('/:id', verifyAdminToken, async (req, res) => {
 
     const updateData = {};
     if (name !== undefined) updateData.name = name.trim();
-    if (namePunjabi !== undefined) updateData.namePunjabi = namePunjabi.trim();
+    if (namePunjabi !== undefined) updateData.namePunjabi = (namePunjabi && namePunjabi.trim()) ? namePunjabi.trim() : updateData.name || '';
     if (description !== undefined) updateData.description = description ? description.trim() : null;
     if (icon !== undefined) updateData.icon = icon ? icon.trim() : null;
     if (imageUrl !== undefined) updateData.imageUrl = imageUrl ? imageUrl.trim() : null;
     if (slug !== undefined && slug.trim()) {
-      updateData.slug = slug.trim().toLowerCase();
+      let candidateSlug = slug.trim().toLowerCase();
+      // Verify candidateSlug doesn't collide with another category
+      const clash = await prisma.category.findFirst({
+        where: { slug: candidateSlug, NOT: { id } }
+      });
+      if (clash) {
+        candidateSlug = `${candidateSlug}-${Date.now().toString().slice(-4)}`;
+      }
+      updateData.slug = candidateSlug;
     }
 
     let updated;
@@ -146,16 +159,20 @@ router.put('/:id', verifyAdminToken, async (req, res) => {
     }
 
     // Real-time WebSocket IO Broadcast with Live Overview Metrics
-    const io = req.app.get('io');
-    if (io) {
-      await broadcastRealtimeUpdate(io, 'categories:updated', { action: 'update', category: updated });
-      io.emit('catalogs:updated', { action: 'update', category: updated });
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        await broadcastRealtimeUpdate(io, 'categories:updated', { action: 'update', category: updated });
+        io.emit('catalogs:updated', { action: 'update', category: updated });
+      }
+    } catch (ioErr) {
+      console.warn('Socket broadcast warning:', ioErr.message);
     }
 
     res.json({ success: true, message: 'Category updated successfully', data: updated });
   } catch (error) {
     console.error('Update category error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update category' });
+    res.status(500).json({ success: false, message: error.message || 'Failed to update category' });
   }
 });
 
@@ -163,21 +180,27 @@ router.put('/:id', verifyAdminToken, async (req, res) => {
 router.delete('/:id', verifyAdminToken, async (req, res) => {
   try {
     const { id } = req.params;
+    // Delete associated products first if any exist to prevent foreign key errors
+    await prisma.product.deleteMany({ where: { categoryId: id } });
     await prisma.category.delete({
       where: { id }
     });
 
     // Real-time WebSocket IO Broadcast with Live Overview Metrics
-    const io = req.app.get('io');
-    if (io) {
-      await broadcastRealtimeUpdate(io, 'categories:updated', { action: 'delete', id });
-      io.emit('catalogs:updated', { action: 'delete', id });
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        await broadcastRealtimeUpdate(io, 'categories:updated', { action: 'delete', id });
+        io.emit('catalogs:updated', { action: 'delete', id });
+      }
+    } catch (ioErr) {
+      console.warn('Socket broadcast warning:', ioErr.message);
     }
 
     res.json({ success: true, message: 'Category deleted successfully' });
   } catch (error) {
     console.error('Delete category error:', error);
-    res.status(500).json({ success: false, message: 'Failed to delete category' });
+    res.status(500).json({ success: false, message: error.message || 'Failed to delete category' });
   }
 });
 

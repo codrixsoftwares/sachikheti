@@ -403,7 +403,7 @@ export default function AdminDashboard({ onClose }) {
           ? productForm.titlePunjabi.trim()
           : productForm.title.trim(),
         categoryId: productForm.categoryId,
-        price: parseFloat(productForm.price),
+        price: parseFloat(String(productForm.price || '0').replace(/[^0-9.]/g, '')) || 0,
         unit: productForm.unit.trim() || '1 kg',
         imageUrl: productForm.imageUrl.trim() || 'https://images.unsplash.com/photo-1592982537447-7440770cbfc9?auto=format&fit=crop&w=800&q=80',
         description: productForm.description.trim(),
@@ -1039,10 +1039,28 @@ export default function AdminDashboard({ onClose }) {
           <div className="modal-overlay" style={{ zIndex: 500 }}>
             <div
               className="modal-content"
-              style={{ maxWidth: '680px', maxHeight: '90vh', overflowY: 'auto' }}
+              style={{
+                maxWidth: '700px',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+                padding: 0,
+                overflow: 'hidden',
+                borderRadius: '16px',
+              }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '18px 24px 14px',
+                  borderBottom: '1px solid #E5E7EB',
+                  background: '#FFFFFF',
+                  flexShrink: 0,
+                }}
+              >
                 <div>
                   <h3 style={{ fontSize: '1.3rem', fontWeight: 800, margin: 0, color: '#1B2E23' }}>
                     {editingProduct ? 'Edit Agricultural Product' : 'Add New Agricultural Product'}
@@ -1060,17 +1078,34 @@ export default function AdminDashboard({ onClose }) {
                 </button>
               </div>
 
-              {/* Product Type Quick Switcher */}
-              <div
+              <form
+                onSubmit={handleSaveProduct}
                 style={{
                   display: 'flex',
-                  gap: '8px',
-                  marginBottom: '18px',
-                  background: '#F1F5F2',
-                  padding: '4px',
-                  borderRadius: '10px',
+                  flexDirection: 'column',
+                  flex: 1,
+                  overflow: 'hidden',
+                  margin: 0,
                 }}
               >
+                <div
+                  style={{
+                    padding: '20px 24px',
+                    overflowY: 'auto',
+                    flex: 1,
+                  }}
+                >
+                  {/* Product Type Quick Switcher */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '8px',
+                      marginBottom: '18px',
+                      background: '#F1F5F2',
+                      padding: '4px',
+                      borderRadius: '10px',
+                    }}
+                  >
                 <button
                   type="button"
                   onClick={() => {
@@ -1137,7 +1172,6 @@ export default function AdminDashboard({ onClose }) {
                 </button>
               </div>
 
-              <form onSubmit={handleSaveProduct}>
                 {/* Product Titles: English & Punjabi */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>
@@ -1572,13 +1606,41 @@ export default function AdminDashboard({ onClose }) {
                   />
                 </div>
 
-                <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }}>
-                  {editingProduct ? 'Save Changes' : 'Create Agricultural Product'}
-                </button>
-              </form>
-            </div>
+                </div>
+              </div>
+
+              {/* Sticky Action Footer */}
+              <div
+                style={{
+                  padding: '14px 24px',
+                  borderTop: '1px solid #E5E7EB',
+                  background: '#F9FAFB',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{ fontSize: '0.8rem', color: '#7A8B80' }}>
+                  {editingProduct ? '⚡ Real-time updates active' : '🌾 Instant storefront visibility'}
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowProductModal(false)}
+                    className="btn btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    {editingProduct ? 'Save Changes' : 'Create Agricultural Product'}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
-        )}
+        </div>
+      )}
 
         {/* Add/Edit Catalog Modal */}
         {showCatalogModal && (
@@ -1878,7 +1940,7 @@ export default function AdminDashboard({ onClose }) {
                     Supabase Project URL
                   </label>
                   <input
-                    type="url"
+                    type="text"
                     value={supabaseForm.url}
                     onChange={(e) => setSupabaseForm({ ...supabaseForm, url: e.target.value })}
                     className="form-input"
