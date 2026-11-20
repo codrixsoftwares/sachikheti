@@ -1276,87 +1276,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
             </div>
           </div>
         </div>
-
-        <div className="admin-topbar-right">
-          {/* Real-time WebSocket Synchronized Badge */}
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '5px 11px',
-              borderRadius: '20px',
-              background: socketConnected ? '#EBF7EE' : '#FEF3C7',
-              border: `1px solid ${socketConnected ? '#A7F3D0' : '#FDE68A'}`,
-              fontSize: '0.78rem',
-              fontWeight: 600,
-              color: socketConnected ? '#065F46' : '#92400E',
-            }}
-            title={socketConnected ? 'Real-time WebSocket Live & Synchronized with SQLite DB' : 'Connecting to real-time socket...'}
-          >
-            <span
-              style={{
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                background: socketConnected ? '#10B981' : '#F59E0B',
-                boxShadow: socketConnected ? '0 0 6px #10B981' : 'none',
-                display: 'inline-block'
-              }}
-            />
-            <span className="hide-on-mobile">{socketConnected ? 'Live Sockets Synchronized' : 'Connecting Sockets...'}</span>
-          </div>
-
-          <button
-            onClick={loadAllData}
-            className="btn btn-secondary btn-sm admin-refresh-btn"
-            title="Refresh Live Database"
-          >
-            <RefreshCw size={15} className={loadingData ? 'spin' : ''} />
-            <span className="hide-on-mobile">Sync Data</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setSupabaseForm({
-                url: supabaseConfig.url,
-                anonKey: supabaseConfig.anonKey,
-                bucket: supabaseConfig.bucket,
-              });
-              setTestResult(null);
-              setShowSupabaseModal(true);
-            }}
-            className={`btn ${supabaseConfig.isConfigured ? 'btn-secondary' : 'btn-primary'} btn-sm`}
-            title="Configure Supabase Cloud Storage"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Database size={15} color={supabaseConfig.isConfigured ? '#15733E' : '#FFFFFF'} />
-            <span className="hide-on-mobile">{supabaseConfig.isConfigured ? 'Supabase CDN Active' : '⚡ Connect Supabase'}</span>
-          </button>
-
-          <button
-            onClick={onNavigateHome}
-            className="btn btn-secondary btn-sm"
-            title="View Live Customer Store"
-          >
-            <ExternalLink size={15} />
-            <span className="hide-on-mobile">Live Store</span>
-          </button>
-
-          <div className="admin-user-badge hide-on-mobile">
-            <ShieldCheck size={14} color="#15733E" />
-            <span>{adminUser.username}</span>
-          </div>
-
-          <button
-            onClick={handleLogout}
-            className="btn btn-secondary btn-sm admin-logout-btn"
-            title="Log Out of Admin"
-          >
-            <LogOut size={15} />
-            <span className="hide-on-mobile">Logout</span>
-          </button>
-        </div>
       </header>
 
       {/* Floating Action Success Alert */}
@@ -1434,14 +1353,107 @@ export default function AdminPortalPage({ onNavigateHome }) {
               <Megaphone size={18} />
               <span>Announcement Ribbon</span>
             </button>
+
+            <button
+              onClick={onNavigateHome}
+              className="admin-nav-item"
+              style={{ color: '#15733E', marginTop: '6px' }}
+              title="View Customer Storefront"
+            >
+              <ExternalLink size={18} />
+              <span>Customer Store</span>
+            </button>
           </div>
 
-          <div className="admin-sidebar-footer">
-            <div style={{ color: '#0A3E22', fontSize: '0.85rem', fontWeight: 700, marginBottom: '2px' }}>
-              SachiKheti Admin Platform
+          {/* Sidebar Bottom Footer with User Profile and Aligned Logout */}
+          <div
+            className="admin-sidebar-footer"
+            style={{
+              paddingTop: '16px',
+              borderTop: '1px solid #E5E7EB',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '4px 6px',
+              }}
+            >
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  background: '#EBF7EE',
+                  border: '1px solid #A7F3D0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#15733E',
+                  flexShrink: 0,
+                }}
+              >
+                <ShieldCheck size={18} />
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    color: '#1B2E23',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {adminUser.username}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#15733E', fontWeight: 600 }}>
+                  Super Admin
+                </div>
+              </div>
             </div>
-            <div style={{ fontSize: '0.74rem', color: '#7A8B80' }}>
-              Direct Farmer Prosperity • LFPC Ltd.
+
+            <button
+              onClick={handleLogout}
+              className="btn btn-secondary admin-logout-btn"
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '10px 14px',
+                borderRadius: '10px',
+                color: '#DC2626',
+                borderColor: '#FEE2E2',
+                background: '#FEF2F2',
+                fontWeight: 700,
+                fontSize: '0.88rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#FEE2E2';
+                e.currentTarget.style.borderColor = '#FCA5A5';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = '#FEF2F2';
+                e.currentTarget.style.borderColor = '#FEE2E2';
+              }}
+              title="Log Out of Admin Platform"
+            >
+              <LogOut size={16} />
+              <span>Logout</span>
+            </button>
+
+            <div style={{ textAlign: 'center', fontSize: '0.72rem', color: '#9CA3AF' }}>
+              SachiKheti Platform • LFPC Ltd.
             </div>
           </div>
         </aside>
