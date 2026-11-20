@@ -377,3 +377,55 @@ export const sendWhatsAppMessage = async (rawPhone, messageText) => {
     };
   }
 };
+
+/**
+ * Send WhatsApp PDF document attachment via Baileys single session
+ */
+export const sendWhatsAppDocument = async (rawPhone, pdfBuffer, fileName, captionText) => {
+  if (!rawPhone || !pdfBuffer) {
+    throw new Error('Phone number and PDF document buffer are required');
+  }
+
+  let cleanPhone = String(rawPhone).replace(/[^0-9]/g, '');
+  if (cleanPhone.length === 10) {
+    cleanPhone = `91${cleanPhone}`;
+  }
+
+  const jid = `${cleanPhone}@s.whatsapp.net`;
+  const fallbackUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(captionText || 'Official SachiKheti PDF Bill')}`;
+
+  if (!sock || connectionStatus !== 'CONNECTED') {
+    return {
+      success: false,
+      connected: false,
+      fallbackUrl,
+      message: 'Baileys WhatsApp is not currently connected. Please connect from Settings > WhatsApp Baileys.',
+    };
+  }
+
+  try {
+    const sent = await sock.sendMessage(jid, {
+      document: pdfBuffer,
+      mimetype: 'application/pdf',
+      fileName: fileName || `SachiKheti_Invoice_${Date.now()}.pdf`,
+      caption: captionText || '🌾 *SachiKheti (LFPC Ltd.)* - Official PDF Bill',
+    });
+    lastSyncedAt = new Date().toISOString();
+    return {
+      success: true,
+      connected: true,
+      messageId: sent?.key?.id,
+      phone: cleanPhone,
+      fileName,
+    };
+  } catch (err) {
+    console.error(`[WhatsApp Document Send Error to ${cleanPhone}]:`, err);
+    return {
+      success: false,
+      connected: true,
+      error: err.message,
+      fallbackUrl,
+      message: `Failed to send PDF document via Baileys (${err.message}).`,
+    };
+  }
+};

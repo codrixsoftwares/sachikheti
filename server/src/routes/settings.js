@@ -21,8 +21,19 @@ const defaultBillDesign = {
   showLogo: true,
   showSignature: true,
   termsNotes: '1. Certified direct farm produce & agricultural machinery custom hiring.\n2. Goods once delivered are verified fresh.\n3. Thank you for supporting indigenous farmers!',
-  authorizedSignatoryTitle: 'Authorized Store Manager (LFPC Ltd.)'
+  authorizedSignatoryTitle: 'Authorized Store Manager (LFPC Ltd.)',
+
+  // Rental & Custom Hiring Configuration
+  rentalBillTitle: 'AGRICULTURAL MACHINERY CUSTOM HIRING & RENTAL AGREEMENT',
+  defaultRentalTenure: '1 Acre',
+  defaultPenaltyPerHour: 250, // ₹250 per extra hour
+  defaultPenaltyPerAcre: 500, // ₹500 per extra acre
+  defaultGracePeriod: '1 Hour',
+  defaultSecurityDeposit: 0,
+  rentalTermsNotes: '1. Machinery is delivered in verified operational condition.\n2. Overdue usage beyond tenure incurs penalty at agreed rates.\n3. Fuel/Diesel & routine operational care is the responsibility of the hirer unless specified.\n4. Hirer is responsible for accidental damage caused by negligence.'
 };
+
+export const getStoreBillDesign = () => readSettings();
 
 const readSettings = () => {
   try {

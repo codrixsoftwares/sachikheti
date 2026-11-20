@@ -49,7 +49,10 @@ import {
   Download,
   FileSpreadsheet,
   DollarSign,
-  ArrowUpDown
+  ArrowUpDown,
+  Tractor,
+  Timer,
+  AlertTriangle
 } from 'lucide-react';
 import {
   getSupabaseConfig,
@@ -125,6 +128,19 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const [billingSearch, setBillingSearch] = useState('');
   const [billingCategoryFilter, setBillingCategoryFilter] = useState('all');
   const [billingListingFilter, setBillingListingFilter] = useState('all'); // 'all', 'sale', 'rent', 'featured'
+  const [billingBillType, setBillingBillType] = useState('auto'); // 'auto', 'direct_sale', 'rental', 'combined'
+  const [billingRentalDetails, setBillingRentalDetails] = useState({
+    tenure: '1 Acre',
+    penaltyPerHour: 250,
+    penaltyPerAcre: 500,
+    gracePeriod: '1 Hour',
+    startDate: '',
+    returnDate: '',
+    operatorIncluded: true,
+    securityDeposit: 0,
+  });
+  const [sendingBillPdf, setSendingBillPdf] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [generatingBill, setGeneratingBill] = useState(false);
   const [generatedInvoice, setGeneratedInvoice] = useState(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -165,6 +181,13 @@ export default function AdminPortalPage({ onNavigateHome }) {
     phone: '+91 8360253372',
     email: 'support@sachikheti.com',
     billTitle: 'TAX INVOICE / CASH MEMO',
+    rentalBillTitle: 'AGRICULTURAL MACHINERY CUSTOM HIRING & RENTAL AGREEMENT',
+    defaultRentalTenure: '1 Acre',
+    defaultPenaltyPerHour: 250,
+    defaultPenaltyPerAcre: 500,
+    defaultGracePeriod: '1 Hour',
+    defaultSecurityDeposit: 0,
+    rentalTermsNotes: '1. Machinery is delivered in verified operational condition.\n2. Overdue usage beyond agreed tenure incurs penalty charges at standard agreed rates.\n3. Fuel/Diesel & routine operational care is the responsibility of the hirer unless operator is supplied.\n4. Hirer is responsible for accidental damage caused by negligence.',
     accentColor: '#15733E',
     themeName: 'forest',
     showLogo: true,
@@ -918,6 +941,17 @@ export default function AdminPortalPage({ onNavigateHome }) {
 
   const buildCurrentVirtualInvoice = () => {
     const invNumber = `SK-BILL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const hasRentalItems = billingCart.some((it) => {
+      const u = (it.unit || '').toLowerCase();
+      const t = (it.title || '').toLowerCase();
+      return it.isRental || it.isForRent || u.includes('acre') || u.includes('hour') || t.includes('tractor') || t.includes('leveler') || t.includes('planter') || t.includes('digger') || t.includes('seeder');
+    });
+    const effectiveBillType = billingBillType === 'auto'
+      ? (hasRentalItems ? 'rental' : 'direct_sale')
+      : billingBillType;
+
+    const isRentalMode = effectiveBillType === 'rental' || effectiveBillType === 'combined';
+
     return {
       orderNumber: invNumber,
       customerName: billingCustomer.name.trim() || 'Direct Store Customer',
@@ -931,6 +965,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
         price: i.price,
         quantity: i.quantity,
         unit: i.unit,
+        isRental: i.isRental || i.isForRent || (i.unit && (i.unit.toLowerCase().includes('acre') || i.unit.toLowerCase().includes('hour'))),
         subtotal: i.price * i.quantity,
       })),
       totalAmount: billingGrandTotal,
@@ -939,6 +974,18 @@ export default function AdminPortalPage({ onNavigateHome }) {
       delivery: Number(billingDelivery || 0),
       paymentMethod: billingCustomer.paymentMethod,
       paymentStatus: billingCustomer.paymentStatus,
+      billType: effectiveBillType,
+      rentalDetails: isRentalMode ? {
+        tenure: billingRentalDetails.tenure || billDesign.defaultRentalTenure || '1 Acre',
+        penaltyRate: `₹${billingRentalDetails.penaltyPerHour || billDesign.defaultPenaltyPerHour || 250}/extra hr | ₹${billingRentalDetails.penaltyPerAcre || billDesign.defaultPenaltyPerAcre || 500}/extra acre`,
+        penaltyPerHour: Number(billingRentalDetails.penaltyPerHour || billDesign.defaultPenaltyPerHour || 250),
+        penaltyPerAcre: Number(billingRentalDetails.penaltyPerAcre || billDesign.defaultPenaltyPerAcre || 500),
+        gracePeriod: billingRentalDetails.gracePeriod || billDesign.defaultGracePeriod || '1 Hour',
+        operatorIncluded: !!billingRentalDetails.operatorIncluded,
+        securityDeposit: Number(billingRentalDetails.securityDeposit || 0),
+        startDate: billingRentalDetails.startDate,
+        returnDate: billingRentalDetails.returnDate,
+      } : null,
       date: new Date().toISOString(),
     };
   };
@@ -969,27 +1016,22 @@ export default function AdminPortalPage({ onNavigateHome }) {
     }
     setGeneratingBill(true);
     try {
-      const invNumber = `SK-BILL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const inv = buildCurrentVirtualInvoice();
       const payload = {
-        orderNumber: invNumber,
-        customerName: billingCustomer.name.trim() || 'Direct Store Customer',
-        customerPhone: billingCustomer.phone.trim() || '8360253372',
-        address: billingCustomer.address.trim() || 'Store Direct / Local Delivery',
-        city: billingCustomer.city.trim() || 'Fatehabad',
-        pincode: billingCustomer.pincode.trim() || '125050',
-        items: billingCart.map((i) => ({
-          id: i.id,
-          title: i.title,
-          price: i.price,
-          quantity: i.quantity,
-          unit: i.unit,
-          subtotal: i.price * i.quantity,
-        })),
-        totalAmount: billingGrandTotal,
-        paymentMethod: billingCustomer.paymentMethod,
-        paymentStatus: billingCustomer.paymentStatus,
-        orderStatus: billingCustomer.paymentStatus === 'PAID' ? 'DELIVERED' : 'CONFIRMED',
-        notes: `[Custom POS Bill] ${billingCustomer.notes || ''} | Subtotal: ₹${billingSubtotal} | Discount: ₹${billingDiscount} | Delivery: ₹${billingDelivery}`,
+        orderNumber: inv.orderNumber,
+        customerName: inv.customerName,
+        customerPhone: inv.customerPhone,
+        address: inv.address,
+        city: inv.city,
+        pincode: inv.pincode,
+        items: inv.items,
+        totalAmount: inv.totalAmount,
+        paymentMethod: inv.paymentMethod,
+        paymentStatus: inv.paymentStatus,
+        orderStatus: inv.paymentStatus === 'PAID' ? 'DELIVERED' : 'CONFIRMED',
+        notes: `[POS ${inv.billType === 'rental' ? 'RENTAL' : inv.billType === 'combined' ? 'COMBINED' : 'SALE'}] ${billingCustomer.notes || ''} ${inv.rentalDetails ? `| Tenure: ${inv.rentalDetails.tenure} | Penalty: ${inv.rentalDetails.penaltyRate}` : ''} | Subtotal: ₹${billingSubtotal} | Disc: ₹${billingDiscount} | Del: ₹${billingDelivery}`,
+        billType: inv.billType,
+        rentalDetails: inv.rentalDetails,
       };
 
       const res = await fetch('/api/orders', {
@@ -1004,7 +1046,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
       if (data.success) {
         const fullInvoice = {
           ...payload,
-          id: data.data?.id || invNumber,
+          id: data.data?.id || inv.orderNumber,
           date: new Date().toISOString(),
           subtotal: billingSubtotal,
           discount: Number(billingDiscount || 0),
@@ -1026,7 +1068,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
           paymentStatus: 'PAID',
           notes: '',
         });
-        setActionSuccess(`Official Bill #${invNumber} generated and recorded!`);
+        setActionSuccess(`Official Bill #${inv.orderNumber} generated and recorded!`);
         setTimeout(() => setActionSuccess(''), 5000);
         loadAllData();
       } else {
@@ -1043,11 +1085,87 @@ export default function AdminPortalPage({ onNavigateHome }) {
     window.print();
   };
 
+  const handleDownloadInvoicePDF = async (inv) => {
+    if (!inv) return;
+    setDownloadingPdf(true);
+    try {
+      const res = await fetch('/api/whatsapp/preview-pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ billData: inv, billDesignOverride: billDesign })
+      });
+      if (!res.ok) throw new Error('PDF generation request failed');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const safeOrderNum = (inv.orderNumber || 'BILL').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `SachiKheti_Bill_${safeOrderNum}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      setActionSuccess(`✓ PDF Bill (${safeOrderNum}.pdf) downloaded successfully!`);
+      setTimeout(() => setActionSuccess(''), 4000);
+    } catch (err) {
+      console.error('Download PDF error:', err);
+      alert('Could not download PDF directly, opening print preview instead.');
+      window.print();
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   const handleWhatsAppInvoice = async (inv) => {
     if (!inv) return;
     const phone = (inv.customerPhone || '8360253372').replace(/[^0-9]/g, '');
     const cleanPhone = phone.startsWith('91') ? phone : `91${phone}`;
-    const itemsLines = (inv.items || [])
+
+    setSendingBillPdf(true);
+    try {
+      // 1. If WhatsApp Baileys is active and connected, send official computer-generated PDF document!
+      if (whatsappStatus?.status === 'CONNECTED') {
+        const res = await fetch('/api/whatsapp/send-bill-pdf', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            phone: cleanPhone,
+            billData: inv,
+            billDesignOverride: billDesign
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          setActionSuccess(`✓ Official PDF Bill (${data.fileName || 'Invoice.pdf'}) dispatched directly to farmer WhatsApp (+${cleanPhone}) via Baileys!`);
+          setTimeout(() => setActionSuccess(''), 6000);
+          setSendingBillPdf(false);
+          return;
+        } else {
+          console.warn('PDF dispatch returned error:', data.message);
+        }
+      }
+    } catch (err) {
+      console.warn('Baileys automated delivery error:', err.message);
+    } finally {
+      setSendingBillPdf(false);
+    }
+
+    // 2. Fallback to WhatsApp Web link if Baileys is not connected or experienced an issue
+    const items = Array.isArray(inv.items) ? inv.items : [];
+    const isRental = inv.billType === 'rental' || inv.billType === 'combined' || items.some((it) => {
+      const u = (it.unit || '').toLowerCase();
+      const t = (it.title || '').toLowerCase();
+      return it.isRental || it.isForRent || u.includes('acre') || u.includes('hour') || t.includes('tractor') || t.includes('leveler');
+    });
+
+    const docTitle = isRental ? (billDesign.rentalBillTitle || 'AGRICULTURAL MACHINERY CUSTOM HIRING AGREEMENT') : billDesign.billTitle;
+    const itemsLines = items
       .map(
         (it, idx) =>
           `${idx + 1}. *${it.title}* (${it.quantity} ${it.unit || ''}) - ₹${(it.price * it.quantity).toLocaleString('en-IN')}`
@@ -1056,17 +1174,20 @@ export default function AdminPortalPage({ onNavigateHome }) {
 
     const rawMessage =
       `🌾 *${billDesign.companyName.toUpperCase()}* 🌾\n` +
-      `*${billDesign.billTitle}*\n` +
+      `*${docTitle}*\n` +
       `----------------------------------------\n` +
       `*Bill No:* ${inv.orderNumber}\n` +
       `*Date:* ${new Date(inv.date || Date.now()).toLocaleDateString('en-IN')}\n` +
-      `*Customer:* ${inv.customerName}\n` +
+      `*Farmer / Hirer:* ${inv.customerName}\n` +
       `*Contact:* ${inv.customerPhone}\n` +
       `*Address:* ${inv.address}, ${inv.city}\n` +
       `----------------------------------------\n` +
-      `*ITEMS PURCHASED:*\n` +
+      `*PARTICULARS & PRODUCTS:*\n` +
       `${itemsLines}\n` +
       `----------------------------------------\n` +
+      (inv.rentalDetails?.tenure ? `🚜 *Agreed Tenure:* ${inv.rentalDetails.tenure}\n` : '') +
+      (inv.rentalDetails?.penaltyRate ? `⚠️ *Overdue Penalty:* ${inv.rentalDetails.penaltyRate}\n` : '') +
+      (inv.rentalDetails?.gracePeriod ? `⏱️ *Grace Period Allowed:* ${inv.rentalDetails.gracePeriod}\n` : '') +
       `*Subtotal:* ₹${(inv.subtotal || inv.totalAmount).toLocaleString('en-IN')}\n` +
       (inv.discount ? `*Discount / Concession:* -₹${Number(inv.discount).toLocaleString('en-IN')}\n` : '') +
       (inv.delivery ? `*Delivery / Freight:* +₹${Number(inv.delivery).toLocaleString('en-IN')}\n` : '') +
@@ -1074,33 +1195,11 @@ export default function AdminPortalPage({ onNavigateHome }) {
       `*Payment Mode:* ${inv.paymentMethod}\n` +
       `*Payment Status:* ${inv.paymentStatus === 'PAID' ? 'PAID ✅' : 'DUE / PENDING ⏳'}\n` +
       `----------------------------------------\n` +
+      `ℹ️ (Connect WhatsApp in Admin Settings to auto-dispatch computer-generated PDF bills directly!)\n` +
       `${billDesign.tagline}\n` +
       `📍 ${billDesign.address}\n` +
       `📞 ${billDesign.phone}`;
 
-    // 1. If WhatsApp Baileys is active and connected, send directly via Baileys API!
-    if (whatsappStatus?.status === 'CONNECTED') {
-      try {
-        const res = await fetch('/api/whatsapp/send', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({ phone: cleanPhone, message: rawMessage })
-        });
-        const data = await res.json();
-        if (data.success) {
-          setActionSuccess(`✓ Official Bill #${inv.orderNumber} sent directly to farmer WhatsApp (+${cleanPhone}) via Baileys!`);
-          setTimeout(() => setActionSuccess(''), 5000);
-          return;
-        }
-      } catch (err) {
-        console.warn('Baileys automated delivery fallback:', err.message);
-      }
-    }
-
-    // 2. Direct WhatsApp Web / App link fallback
     const msg = encodeURIComponent(rawMessage);
     window.open(`https://wa.me/${cleanPhone}?text=${msg}`, '_blank');
   };
@@ -1117,12 +1216,30 @@ export default function AdminPortalPage({ onNavigateHome }) {
     }
     let discount = 0;
     let delivery = 0;
-    if (order.notes) {
-      const discMatch = order.notes.match(/Discount:\s*₹?([\d.]+)/i);
-      const delMatch = order.notes.match(/Delivery:\s*₹?([\d.]+)/i);
+    const notesStr = order.notes || '';
+    if (notesStr) {
+      const discMatch = notesStr.match(/Discount:\s*₹?([\d.]+)/i);
+      const delMatch = notesStr.match(/Delivery:\s*₹?([\d.]+)/i);
       if (discMatch) discount = parseFloat(discMatch[1]) || 0;
       if (delMatch) delivery = parseFloat(delMatch[1]) || 0;
     }
+
+    const hasRentalNote = notesStr.includes('[POS RENTAL]') || notesStr.includes('Tenure:');
+    const isRentalItems = (parsedItems || []).some((it) => {
+      const u = (it.unit || '').toLowerCase();
+      const t = (it.title || it.name || '').toLowerCase();
+      return it.isRental || it.isForRent || u.includes('acre') || u.includes('hour') || t.includes('tractor') || t.includes('leveler');
+    });
+
+    let tenure = '';
+    let penaltyRate = '';
+    const tenureMatch = notesStr.match(/Tenure:\s*([^|]+)/i);
+    const penaltyMatch = notesStr.match(/Penalty:\s*([^|]+)/i);
+    if (tenureMatch) tenure = tenureMatch[1].trim();
+    if (penaltyMatch) penaltyRate = penaltyMatch[1].trim();
+
+    const isRental = hasRentalNote || isRentalItems;
+
     const invoice = {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -1147,6 +1264,13 @@ export default function AdminPortalPage({ onNavigateHome }) {
       discount,
       delivery,
       totalAmount: order.totalAmount,
+      billType: isRental ? 'rental' : 'direct_sale',
+      rentalDetails: isRental ? {
+        tenure: tenure || billDesign.defaultRentalTenure || '1 Acre',
+        penaltyRate: penaltyRate || `₹${billDesign.defaultPenaltyPerHour || 250}/extra hr | ₹${billDesign.defaultPenaltyPerAcre || 500}/extra acre`,
+        gracePeriod: billDesign.defaultGracePeriod || '1 Hour',
+        operatorIncluded: true,
+      } : null,
     };
     setGeneratedInvoice(invoice);
     setShowInvoiceModal(true);
@@ -1161,12 +1285,30 @@ export default function AdminPortalPage({ onNavigateHome }) {
     }
     let discount = 0;
     let delivery = 0;
-    if (order.notes) {
-      const discMatch = order.notes.match(/Discount:\s*₹?([\d.]+)/i);
-      const delMatch = order.notes.match(/Delivery:\s*₹?([\d.]+)/i);
+    const notesStr = order.notes || '';
+    if (notesStr) {
+      const discMatch = notesStr.match(/Discount:\s*₹?([\d.]+)/i);
+      const delMatch = notesStr.match(/Delivery:\s*₹?([\d.]+)/i);
       if (discMatch) discount = parseFloat(discMatch[1]) || 0;
       if (delMatch) delivery = parseFloat(delMatch[1]) || 0;
     }
+
+    const hasRentalNote = notesStr.includes('[POS RENTAL]') || notesStr.includes('Tenure:');
+    const isRentalItems = (parsedItems || []).some((it) => {
+      const u = (it.unit || '').toLowerCase();
+      const t = (it.title || it.name || '').toLowerCase();
+      return it.isRental || it.isForRent || u.includes('acre') || u.includes('hour') || t.includes('tractor') || t.includes('leveler');
+    });
+
+    let tenure = '';
+    let penaltyRate = '';
+    const tenureMatch = notesStr.match(/Tenure:\s*([^|]+)/i);
+    const penaltyMatch = notesStr.match(/Penalty:\s*([^|]+)/i);
+    if (tenureMatch) tenure = tenureMatch[1].trim();
+    if (penaltyMatch) penaltyRate = penaltyMatch[1].trim();
+
+    const isRental = hasRentalNote || isRentalItems;
+
     const invoice = {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -1191,6 +1333,13 @@ export default function AdminPortalPage({ onNavigateHome }) {
       discount,
       delivery,
       totalAmount: order.totalAmount,
+      billType: isRental ? 'rental' : 'direct_sale',
+      rentalDetails: isRental ? {
+        tenure: tenure || billDesign.defaultRentalTenure || '1 Acre',
+        penaltyRate: penaltyRate || `₹${billDesign.defaultPenaltyPerHour || 250}/extra hr | ₹${billDesign.defaultPenaltyPerAcre || 500}/extra acre`,
+        gracePeriod: billDesign.defaultGracePeriod || '1 Hour',
+        operatorIncluded: true,
+      } : null,
     };
     handleWhatsAppInvoice(invoice);
   };
@@ -3156,6 +3305,149 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           </select>
                         </div>
                       </div>
+
+                      {/* Bill Type & Agreement Mode Selector */}
+                      <div style={{ marginTop: '4px', paddingTop: '8px', borderTop: '1px dashed #E5E7EB' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#374151', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <FileText size={12} color={billDesign.accentColor} />
+                            <span>Bill & Agreement Type</span>
+                          </label>
+                          <span style={{ fontSize: '0.68rem', color: '#6B7280' }}>
+                            {billingBillType === 'auto' ? '⚡ Auto-Detecting' : 'Custom Mode'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+                          {[
+                            { id: 'auto', label: '⚡ Auto-Detect' },
+                            { id: 'direct_sale', label: '🛒 Produce Sale' },
+                            { id: 'rental', label: '🚜 Rental Agreement' },
+                            { id: 'combined', label: '🌾 Combined Bill' },
+                          ].map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => setBillingBillType(t.id)}
+                              style={{
+                                padding: '5px 6px',
+                                fontSize: '0.72rem',
+                                fontWeight: billingBillType === t.id ? 700 : 500,
+                                borderRadius: '6px',
+                                border: billingBillType === t.id ? `1.5px solid ${billDesign.accentColor}` : '1px solid #E5E7EB',
+                                background: billingBillType === t.id ? '#ECFDF5' : '#F9FAFB',
+                                color: billingBillType === t.id ? billDesign.accentColor : '#4B5563',
+                                cursor: 'pointer',
+                                textAlign: 'center',
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              {t.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Machinery Custom Hiring & Rental Details Box */}
+                      {(billingBillType === 'rental' || billingBillType === 'combined' || (billingBillType === 'auto' && billingCart.some(i => i.isRental || i.isForRent || (i.unit && (i.unit.toLowerCase().includes('acre') || i.unit.toLowerCase().includes('hour')))))) && (
+                        <div style={{ marginTop: '6px', padding: '10px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.74rem', fontWeight: 800, color: '#166534' }}>
+                              <Tractor size={14} />
+                              <span>Machinery Rental & Penalty Terms</span>
+                            </div>
+                            <span style={{ fontSize: '0.68rem', padding: '1px 6px', background: '#DCFCE7', color: '#15803D', borderRadius: '10px', fontWeight: 700 }}>
+                              Custom Hiring
+                            </span>
+                          </div>
+
+                          <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '3px' }}>
+                            Agreed Rental Tenure / Work Capacity:
+                          </label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px' }}>
+                            {['1 Acre', '2 Acres', '5 Acres', '10 Acres', '1 Hour', '8 Hours', '24 Hours', 'Per Day'].map((chip) => (
+                              <button
+                                key={chip}
+                                type="button"
+                                onClick={() => setBillingRentalDetails({ ...billingRentalDetails, tenure: chip })}
+                                style={{
+                                  padding: '2px 7px',
+                                  fontSize: '0.7rem',
+                                  borderRadius: '12px',
+                                  border: billingRentalDetails.tenure === chip ? '1.5px solid #16A34A' : '1px solid #D1D5DB',
+                                  background: billingRentalDetails.tenure === chip ? '#16A34A' : '#FFFFFF',
+                                  color: billingRentalDetails.tenure === chip ? '#FFFFFF' : '#374151',
+                                  fontWeight: billingRentalDetails.tenure === chip ? 700 : 500,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {chip}
+                              </button>
+                            ))}
+                          </div>
+
+                          <input
+                            type="text"
+                            value={billingRentalDetails.tenure}
+                            onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, tenure: e.target.value })}
+                            placeholder="e.g. 5 Acres or 2 Days"
+                            className="form-input"
+                            style={{ margin: '0 0 8px 0', padding: '4px 8px', fontSize: '0.78rem', background: '#FFFFFF' }}
+                          />
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '6px' }}>
+                            <div>
+                              <label style={{ fontSize: '0.68rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '2px' }}>
+                                Penalty / Extra Hour (₹)
+                              </label>
+                              <input
+                                type="number"
+                                value={billingRentalDetails.penaltyPerHour}
+                                onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, penaltyPerHour: parseFloat(e.target.value) || 0 })}
+                                className="form-input"
+                                style={{ margin: 0, padding: '4px 6px', fontSize: '0.78rem', background: '#FFFFFF' }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: '0.68rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '2px' }}>
+                                Penalty / Extra Acre (₹)
+                              </label>
+                              <input
+                                type="number"
+                                value={billingRentalDetails.penaltyPerAcre}
+                                onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, penaltyPerAcre: parseFloat(e.target.value) || 0 })}
+                                className="form-input"
+                                style={{ margin: 0, padding: '4px 6px', fontSize: '0.78rem', background: '#FFFFFF' }}
+                              />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                            <div>
+                              <label style={{ fontSize: '0.68rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '2px' }}>
+                                Grace Period Allowed
+                              </label>
+                              <input
+                                type="text"
+                                value={billingRentalDetails.gracePeriod}
+                                onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, gracePeriod: e.target.value })}
+                                placeholder="e.g. 1 Hour"
+                                className="form-input"
+                                style={{ margin: 0, padding: '4px 6px', fontSize: '0.78rem', background: '#FFFFFF' }}
+                              />
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', paddingTop: '14px' }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', fontWeight: 600, color: '#166534', cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={billingRentalDetails.operatorIncluded}
+                                  onChange={(e) => setBillingRentalDetails({ ...billingRentalDetails, operatorIncluded: e.target.checked })}
+                                />
+                                <span>Operator Included</span>
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -3217,13 +3509,13 @@ export default function AdminPortalPage({ onNavigateHome }) {
                         }}
                       >
                         <Printer size={15} />
-                        <span>Print / PDF</span>
+                        <span>Print Preview</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={handleDirectWhatsAppVirtualBill}
-                        disabled={billingCart.length === 0}
+                        disabled={billingCart.length === 0 || sendingBillPdf}
                         className="btn btn-secondary"
                         style={{
                           display: 'inline-flex',
@@ -3238,9 +3530,13 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           background: '#F0FDF4',
                         }}
                       >
-                        <Send size={15} />
+                        {sendingBillPdf ? <RefreshCw size={15} className="spin" /> : <Send size={15} />}
                         <span>
-                          {whatsappStatus?.status === 'CONNECTED' ? 'WhatsApp Baileys' : 'Send WhatsApp'}
+                          {sendingBillPdf
+                            ? 'Sending PDF...'
+                            : whatsappStatus?.status === 'CONNECTED'
+                              ? 'WhatsApp PDF'
+                              : 'Send WhatsApp'}
                         </span>
                       </button>
                     </div>
@@ -5000,7 +5296,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                       </div>
 
                       <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.8rem' }}>Terms & Conditions / Assurance Note</label>
+                        <label className="form-label" style={{ fontSize: '0.8rem' }}>Direct Produce Sales Terms & Assurance Note</label>
                         <textarea
                           rows={2}
                           value={billDesign.termsNotes}
@@ -5008,6 +5304,86 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           className="form-textarea"
                           style={{ margin: 0, fontSize: '0.8rem' }}
                         />
+                      </div>
+
+                      {/* Dedicated Machinery Rental & Custom Hiring Agreement Configuration */}
+                      <div style={{ marginTop: '10px', padding: '16px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                          <Tractor size={18} color="#15803D" />
+                          <h4 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#166534' }}>
+                            Machinery Rental Agreement & Overdue Penalty Policy
+                          </h4>
+                        </div>
+                        <p style={{ margin: '0 0 12px 0', fontSize: '0.76rem', color: '#166534' }}>
+                          Specify the legal header, default tenure units, and enforceable overdue penalties for agricultural tractors, seeders, levelers, and custom hiring.
+                        </p>
+
+                        <div className="form-group" style={{ marginBottom: '10px' }}>
+                          <label className="form-label" style={{ fontSize: '0.78rem', color: '#14532D' }}>
+                            Rental Agreement Header Title
+                          </label>
+                          <input
+                            type="text"
+                            value={billDesign.rentalBillTitle || ''}
+                            onChange={(e) => setBillDesign({ ...billDesign, rentalBillTitle: e.target.value })}
+                            className="form-input"
+                            style={{ margin: 0, background: '#FFFFFF' }}
+                            placeholder="AGRICULTURAL MACHINERY CUSTOM HIRING & RENTAL AGREEMENT"
+                          />
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.74rem', color: '#14532D' }}>
+                              Default Overdue Rate / Hr (₹)
+                            </label>
+                            <input
+                              type="number"
+                              value={billDesign.defaultPenaltyPerHour || 250}
+                              onChange={(e) => setBillDesign({ ...billDesign, defaultPenaltyPerHour: parseFloat(e.target.value) || 0 })}
+                              className="form-input"
+                              style={{ margin: 0, background: '#FFFFFF' }}
+                            />
+                          </div>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.74rem', color: '#14532D' }}>
+                              Default Overdue Rate / Acre (₹)
+                            </label>
+                            <input
+                              type="number"
+                              value={billDesign.defaultPenaltyPerAcre || 500}
+                              onChange={(e) => setBillDesign({ ...billDesign, defaultPenaltyPerAcre: parseFloat(e.target.value) || 0 })}
+                              className="form-input"
+                              style={{ margin: 0, background: '#FFFFFF' }}
+                            />
+                          </div>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.74rem', color: '#14532D' }}>
+                              Default Grace Period
+                            </label>
+                            <input
+                              type="text"
+                              value={billDesign.defaultGracePeriod || '1 Hour'}
+                              onChange={(e) => setBillDesign({ ...billDesign, defaultGracePeriod: e.target.value })}
+                              className="form-input"
+                              style={{ margin: 0, background: '#FFFFFF' }}
+                              placeholder="e.g. 1 Hour"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="form-group" style={{ margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.78rem', color: '#14532D' }}>
+                            Machinery Rental Agreement Legal Terms & Damage Clauses
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={billDesign.rentalTermsNotes || ''}
+                            onChange={(e) => setBillDesign({ ...billDesign, rentalTermsNotes: e.target.value })}
+                            className="form-textarea"
+                            style={{ margin: 0, fontSize: '0.78rem', background: '#FFFFFF' }}
+                          />
+                        </div>
                       </div>
 
                       <div style={{ display: 'flex', gap: '20px', margin: '4px 0' }}>
@@ -6427,8 +6803,12 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#1F2937', letterSpacing: '0.5px' }}>
-                    {billDesign.billTitle}
+                  <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#1F2937', letterSpacing: '0.5px' }}>
+                    {generatedInvoice.billType === 'rental'
+                      ? (billDesign.rentalBillTitle || 'AGRICULTURAL MACHINERY CUSTOM HIRING AGREEMENT')
+                      : generatedInvoice.billType === 'combined'
+                        ? 'FARM PRODUCE & MACHINERY COMBINED INVOICE'
+                        : billDesign.billTitle}
                   </div>
                   <div style={{ fontSize: '0.84rem', fontWeight: 700, color: billDesign.accentColor, marginTop: '2px' }}>
                     #{generatedInvoice.orderNumber}
@@ -6509,6 +6889,22 @@ export default function AdminPortalPage({ onNavigateHome }) {
                 </tbody>
               </table>
 
+              {/* Machinery Custom Hiring & Overdue Penalty Clause Box */}
+              {generatedInvoice.rentalDetails && (
+                <div style={{ margin: '14px 0', padding: '12px 14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', fontWeight: 800, color: '#166534', marginBottom: '6px' }}>
+                    <Tractor size={16} />
+                    <span>Agricultural Machinery Custom Hiring & Overdue Penalty Terms:</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem', color: '#14532D' }}>
+                    <div><strong>Agreed Working Tenure:</strong> {generatedInvoice.rentalDetails.tenure}</div>
+                    <div><strong>Overdue Penalty Rate:</strong> {generatedInvoice.rentalDetails.penaltyRate}</div>
+                    <div><strong>Grace Period Permitted:</strong> {generatedInvoice.rentalDetails.gracePeriod}</div>
+                    <div><strong>Operator / Driver:</strong> {generatedInvoice.rentalDetails.operatorIncluded ? 'Supplied with Machine' : 'Arranged by Hirer'}</div>
+                  </div>
+                </div>
+              )}
+
               {/* Totals Summary */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '24px' }}>
                 <div style={{ width: '260px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -6538,7 +6934,9 @@ export default function AdminPortalPage({ onNavigateHome }) {
               {/* Signatory & Terms */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderTop: '1px solid #E5E7EB', paddingTop: '16px', fontSize: '0.74rem', color: '#6B7280' }}>
                 <div style={{ maxWidth: '420px', whiteSpace: 'pre-line' }}>
-                  {billDesign.termsNotes}
+                  {(generatedInvoice.billType === 'rental' || generatedInvoice.rentalDetails)
+                    ? (billDesign.rentalTermsNotes || billDesign.termsNotes)
+                    : billDesign.termsNotes}
                 </div>
                 {billDesign.showSignature && (
                   <div style={{ textAlign: 'center' }}>
@@ -6561,19 +6959,38 @@ export default function AdminPortalPage({ onNavigateHome }) {
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '10px',
               }}
             >
               <button
                 type="button"
                 onClick={() => handleWhatsAppInvoice(generatedInvoice)}
+                disabled={sendingBillPdf}
                 className="btn btn-secondary"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#15803D', borderColor: '#BBF7D0', background: '#F0FDF4' }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#15803D', borderColor: '#BBF7D0', background: '#F0FDF4', fontWeight: 700 }}
               >
-                <Send size={15} />
-                <span>Send Bill via WhatsApp</span>
+                {sendingBillPdf ? <RefreshCw size={15} className="spin" /> : <Send size={15} />}
+                <span>
+                  {sendingBillPdf
+                    ? 'Generating & Sending PDF...'
+                    : whatsappStatus?.status === 'CONNECTED'
+                      ? 'Send Official PDF via WhatsApp'
+                      : 'Send WhatsApp'}
+                </span>
               </button>
 
-              <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadInvoicePDF(generatedInvoice)}
+                  disabled={downloadingPdf}
+                  className="btn btn-secondary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {downloadingPdf ? <RefreshCw size={15} className="spin" /> : <Download size={15} />}
+                  <span>{downloadingPdf ? 'Downloading PDF...' : 'Download PDF'}</span>
+                </button>
                 <button
                   type="button"
                   onClick={handlePrintInvoice}
@@ -6581,14 +6998,14 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
                   <Printer size={15} />
-                  <span>Print Tax Invoice</span>
+                  <span>Print Slip</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowInvoiceModal(false)}
                   className="btn btn-secondary"
                 >
-                  Close & New Bill
+                  Close
                 </button>
               </div>
             </div>
