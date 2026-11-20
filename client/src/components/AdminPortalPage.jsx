@@ -409,10 +409,32 @@ export default function AdminPortalPage({ onNavigateHome }) {
       parsedSpecs = {};
     }
 
-    const isRental = Boolean(parsedSpecs.isForRent || parsedSpecs['Listing Type']?.includes('Rent'));
-    const isSale = parsedSpecs.isForSale !== undefined ? Boolean(parsedSpecs.isForSale) : true;
+    let isRental = false;
+    let isSale = true;
+    if (parsedSpecs.isForRent !== undefined) {
+      isRental = Boolean(parsedSpecs.isForRent);
+    } else if (parsedSpecs['Listing Type']) {
+      isRental = parsedSpecs['Listing Type'].toLowerCase().includes('rent');
+    } else {
+      const unit = (product.unit || '').toLowerCase();
+      const cat = (product.category?.name || product.category?.slug || '').toLowerCase();
+      isRental = unit.includes('acre') || unit.includes('hour') || cat.includes('machin') || cat.includes('rent');
+    }
+
+    if (parsedSpecs.isForSale !== undefined) {
+      isSale = Boolean(parsedSpecs.isForSale);
+    } else if (parsedSpecs['Listing Type']) {
+      isSale = parsedSpecs['Listing Type'].toLowerCase().includes('sale') || !isRental;
+    } else {
+      isSale = !isRental || Boolean(parsedSpecs.isForSale);
+    }
+
+    if (!isRental && !isSale) {
+      isSale = true;
+    }
+
     const isMachinery = Boolean(
-      isRental ||
+      parsedSpecs.productType === 'machinery' ||
       parsedSpecs.machineType ||
       parsedSpecs['Machine Type'] ||
       parsedSpecs.workingCapacity ||
@@ -451,37 +473,48 @@ export default function AdminPortalPage({ onNavigateHome }) {
       const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
       const method = editingProduct ? 'PUT' : 'POST';
 
-      // Build structured specs object honoring rent/sale and machinery capacity
-      const specsObj = {};
+      // Parse any pre-existing specs first
+      let baseSpecs = {};
+      if (typeof productForm.specs === 'string' && productForm.specs.trim()) {
+        try {
+          baseSpecs = JSON.parse(productForm.specs);
+        } catch (e) {
+          baseSpecs = { Notes: productForm.specs.trim() };
+        }
+      }
+
+      // Explicitly override with user's latest form selections
+      const specsObj = {
+        ...baseSpecs,
+        isForRent: Boolean(productForm.isForRent),
+        isForSale: Boolean(productForm.isForSale),
+        productType: productForm.productType,
+      };
+
       if (productForm.isForRent && productForm.isForSale) {
         specsObj['Listing Type'] = 'Available for Rent & Sale';
       } else if (productForm.isForRent) {
         specsObj['Listing Type'] = 'Available for Rent (Custom Hiring)';
-      } else if (productForm.isForSale) {
+      } else {
         specsObj['Listing Type'] = 'Direct Sale';
       }
-      specsObj.isForRent = Boolean(productForm.isForRent);
-      specsObj.isForSale = Boolean(productForm.isForSale);
-      specsObj.productType = productForm.productType;
 
       if (productForm.workingCapacity && productForm.workingCapacity.trim()) {
         specsObj['Working Capacity'] = productForm.workingCapacity.trim();
-      }
-      if (productForm.workingDuration && productForm.workingDuration.trim()) {
-        specsObj['Working Duration / Availability'] = productForm.workingDuration.trim();
-      }
-      if (productForm.machineType && productForm.machineType.trim()) {
-        specsObj['Machine Type'] = productForm.machineType.trim();
+      } else {
+        delete specsObj['Working Capacity'];
       }
 
-      // Preserve any custom specs if present
-      if (typeof productForm.specs === 'string' && productForm.specs.trim()) {
-        try {
-          const custom = JSON.parse(productForm.specs);
-          Object.assign(specsObj, custom);
-        } catch (e) {
-          if (!specsObj['Notes']) specsObj['Notes'] = productForm.specs.trim();
-        }
+      if (productForm.workingDuration && productForm.workingDuration.trim()) {
+        specsObj['Working Duration / Availability'] = productForm.workingDuration.trim();
+      } else {
+        delete specsObj['Working Duration / Availability'];
+      }
+
+      if (productForm.machineType && productForm.machineType.trim()) {
+        specsObj['Machine Type'] = productForm.machineType.trim();
+      } else {
+        delete specsObj['Machine Type'];
       }
 
       const payload = {
@@ -886,25 +919,48 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const getProductListingType = (product) => {
     let isForRent = false;
     let isForSale = true;
+    let hasExplicitSpecs = false;
+
     try {
       if (product.specs) {
         const s = typeof product.specs === 'string' ? JSON.parse(product.specs) : product.specs;
-        if (s.isForRent !== undefined) isForRent = Boolean(s.isForRent);
-        if (s.isForSale !== undefined) isForSale = Boolean(s.isForSale);
-        if (s['Listing Type']?.toLowerCase().includes('rent')) isForRent = true;
-        if (s.listingType === 'rent') { isForRent = true; isForSale = false; }
-        if (s.listingType === 'both') { isForRent = true; isForSale = true; }
+        if (s.isForRent !== undefined) {
+          isForRent = Boolean(s.isForRent);
+          hasExplicitSpecs = true;
+        }
+        if (s.isForSale !== undefined) {
+          isForSale = Boolean(s.isForSale);
+          hasExplicitSpecs = true;
+        }
+        if (!hasExplicitSpecs && s['Listing Type']) {
+          const lt = s['Listing Type'].toLowerCase();
+          if (lt.includes('rent') && lt.includes('sale')) {
+            isForRent = true;
+            isForSale = true;
+            hasExplicitSpecs = true;
+          } else if (lt.includes('rent')) {
+            isForRent = true;
+            isForSale = false;
+            hasExplicitSpecs = true;
+          } else if (lt.includes('sale')) {
+            isForRent = false;
+            isForSale = true;
+            hasExplicitSpecs = true;
+          }
+        }
       }
     } catch (e) {}
 
-    // Smart fallback based on units or machinery categories
-    const unit = (product.unit || '').toLowerCase();
-    const cat = (product.category?.name || product.category?.slug || '').toLowerCase();
-    if (unit.includes('acre') || unit.includes('hour') || unit.includes('24 hours') || unit.includes('day') || unit.includes('trip')) {
-      isForRent = true;
-    }
-    if (cat.includes('machin') || cat.includes('tool') || cat.includes('rent') || cat.includes('equip')) {
-      isForRent = true;
+    // Only apply category/unit heuristic if specs were never explicitly set!
+    if (!hasExplicitSpecs) {
+      const unit = (product.unit || '').toLowerCase();
+      const cat = (product.category?.name || product.category?.slug || '').toLowerCase();
+      if (unit.includes('acre') || unit.includes('hour') || unit.includes('24 hours') || unit.includes('day') || unit.includes('trip')) {
+        isForRent = true;
+      }
+      if (cat.includes('machin') || cat.includes('tool') || cat.includes('rent') || cat.includes('equip')) {
+        isForRent = true;
+      }
     }
 
     if (isForRent && isForSale) return 'both';

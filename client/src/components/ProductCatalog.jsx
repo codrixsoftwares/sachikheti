@@ -129,7 +129,8 @@ export default function ProductCatalog({
     try {
       if (p.specs) {
         const s = typeof p.specs === 'string' ? JSON.parse(p.specs) : p.specs;
-        if (s.isForRent || s['Listing Type']?.toLowerCase().includes('rent')) return true;
+        if (s.isForRent !== undefined) return Boolean(s.isForRent);
+        if (s['Listing Type']) return s['Listing Type'].toLowerCase().includes('rent');
       }
     } catch (e) {}
     const unit = (p.unit || '').toLowerCase();

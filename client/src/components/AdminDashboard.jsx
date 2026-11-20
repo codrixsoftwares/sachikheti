@@ -365,36 +365,48 @@ export default function AdminDashboard({ onClose }) {
       const method = editingProduct ? 'PUT' : 'POST';
       const endpoint = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
 
-      // Build structured specs object honoring rent/sale and machinery capacity
-      const specsObj = {};
+      // Parse any pre-existing specs first
+      let baseSpecs = {};
+      if (typeof productForm.specs === 'string' && productForm.specs.trim()) {
+        try {
+          baseSpecs = JSON.parse(productForm.specs);
+        } catch (err) {
+          baseSpecs = { Notes: productForm.specs.trim() };
+        }
+      }
+
+      // Explicitly override with user's latest form selections
+      const specsObj = {
+        ...baseSpecs,
+        isForRent: Boolean(productForm.isForRent),
+        isForSale: Boolean(productForm.isForSale),
+        productType: productForm.productType,
+      };
+
       if (productForm.isForRent && productForm.isForSale) {
         specsObj['Listing Type'] = 'Available for Rent & Sale';
       } else if (productForm.isForRent) {
         specsObj['Listing Type'] = 'Available for Rent (Custom Hiring)';
-      } else if (productForm.isForSale) {
+      } else {
         specsObj['Listing Type'] = 'Direct Sale';
       }
-      specsObj.isForRent = Boolean(productForm.isForRent);
-      specsObj.isForSale = Boolean(productForm.isForSale);
-      specsObj.productType = productForm.productType;
 
       if (productForm.workingCapacity && productForm.workingCapacity.trim()) {
         specsObj['Working Capacity'] = productForm.workingCapacity.trim();
-      }
-      if (productForm.workingDuration && productForm.workingDuration.trim()) {
-        specsObj['Working Duration / Availability'] = productForm.workingDuration.trim();
-      }
-      if (productForm.machineType && productForm.machineType.trim()) {
-        specsObj['Machine Type'] = productForm.machineType.trim();
+      } else {
+        delete specsObj['Working Capacity'];
       }
 
-      if (typeof productForm.specs === 'string' && productForm.specs.trim()) {
-        try {
-          const custom = JSON.parse(productForm.specs);
-          Object.assign(specsObj, custom);
-        } catch (err) {
-          if (!specsObj['Notes']) specsObj['Notes'] = productForm.specs.trim();
-        }
+      if (productForm.workingDuration && productForm.workingDuration.trim()) {
+        specsObj['Working Duration / Availability'] = productForm.workingDuration.trim();
+      } else {
+        delete specsObj['Working Duration / Availability'];
+      }
+
+      if (productForm.machineType && productForm.machineType.trim()) {
+        specsObj['Machine Type'] = productForm.machineType.trim();
+      } else {
+        delete specsObj['Machine Type'];
       }
 
       const payload = {
@@ -487,10 +499,32 @@ export default function AdminDashboard({ onClose }) {
       parsedSpecs = {};
     }
 
-    const isRental = Boolean(parsedSpecs.isForRent || parsedSpecs['Listing Type']?.includes('Rent'));
-    const isSale = parsedSpecs.isForSale !== undefined ? Boolean(parsedSpecs.isForSale) : true;
+    let isRental = false;
+    let isSale = true;
+    if (parsedSpecs.isForRent !== undefined) {
+      isRental = Boolean(parsedSpecs.isForRent);
+    } else if (parsedSpecs['Listing Type']) {
+      isRental = parsedSpecs['Listing Type'].toLowerCase().includes('rent');
+    } else {
+      const unit = (product.unit || '').toLowerCase();
+      const cat = (product.category?.name || product.category?.slug || '').toLowerCase();
+      isRental = unit.includes('acre') || unit.includes('hour') || cat.includes('machin') || cat.includes('rent');
+    }
+
+    if (parsedSpecs.isForSale !== undefined) {
+      isSale = Boolean(parsedSpecs.isForSale);
+    } else if (parsedSpecs['Listing Type']) {
+      isSale = parsedSpecs['Listing Type'].toLowerCase().includes('sale') || !isRental;
+    } else {
+      isSale = !isRental || Boolean(parsedSpecs.isForSale);
+    }
+
+    if (!isRental && !isSale) {
+      isSale = true;
+    }
+
     const isMachinery = Boolean(
-      isRental ||
+      parsedSpecs.productType === 'machinery' ||
       parsedSpecs.machineType ||
       parsedSpecs['Machine Type'] ||
       parsedSpecs.workingCapacity ||
