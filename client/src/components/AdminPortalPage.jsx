@@ -83,6 +83,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
   // Search & Filter controls
   const [productSearch, setProductSearch] = useState('');
   const [selectedProductCategory, setSelectedProductCategory] = useState('all');
+  const [productListingFilter, setProductListingFilter] = useState('all'); // 'all', 'featured', 'rent', 'sale'
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
 
@@ -881,13 +882,54 @@ export default function AdminPortalPage({ onNavigateHome }) {
     }
   };
 
+  // Helper to determine product listing type (Direct Sale, Rent, or Both)
+  const getProductListingType = (product) => {
+    let isForRent = false;
+    let isForSale = true;
+    try {
+      if (product.specs) {
+        const s = typeof product.specs === 'string' ? JSON.parse(product.specs) : product.specs;
+        if (s.isForRent !== undefined) isForRent = Boolean(s.isForRent);
+        if (s.isForSale !== undefined) isForSale = Boolean(s.isForSale);
+        if (s['Listing Type']?.toLowerCase().includes('rent')) isForRent = true;
+        if (s.listingType === 'rent') { isForRent = true; isForSale = false; }
+        if (s.listingType === 'both') { isForRent = true; isForSale = true; }
+      }
+    } catch (e) {}
+
+    // Smart fallback based on units or machinery categories
+    const unit = (product.unit || '').toLowerCase();
+    const cat = (product.category?.name || product.category?.slug || '').toLowerCase();
+    if (unit.includes('acre') || unit.includes('hour') || unit.includes('24 hours') || unit.includes('day') || unit.includes('trip')) {
+      isForRent = true;
+    }
+    if (cat.includes('machin') || cat.includes('tool') || cat.includes('rent') || cat.includes('equip')) {
+      isForRent = true;
+    }
+
+    if (isForRent && isForSale) return 'both';
+    if (isForRent) return 'rent';
+    return 'sale';
+  };
+
   // Filter calculations
   const filteredProducts = products.filter(p => {
     const matchesSearch = !productSearch ||
       p.title.toLowerCase().includes(productSearch.toLowerCase()) ||
       (p.description && p.description.toLowerCase().includes(productSearch.toLowerCase()));
     const matchesCat = selectedProductCategory === 'all' || p.categoryId === selectedProductCategory;
-    return matchesSearch && matchesCat;
+
+    const listingType = getProductListingType(p);
+    let matchesListing = true;
+    if (productListingFilter === 'featured') {
+      matchesListing = Boolean(p.featured);
+    } else if (productListingFilter === 'rent') {
+      matchesListing = listingType === 'rent' || listingType === 'both';
+    } else if (productListingFilter === 'sale') {
+      matchesListing = listingType === 'sale' || listingType === 'both';
+    }
+
+    return matchesSearch && matchesCat && matchesListing;
   });
 
   const getStatus = (o) => o.orderStatus || o.status || 'PENDING';
@@ -1733,6 +1775,48 @@ export default function AdminPortalPage({ onNavigateHome }) {
                     ))}
                   </select>
                 </div>
+
+                {/* Quick Status & Rental Filter Pills */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setProductListingFilter('all')}
+                    className={`btn btn-sm ${productListingFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ fontSize: '0.78rem', padding: '5px 12px' }}
+                  >
+                    All Products ({products.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProductListingFilter('featured')}
+                    className={`btn btn-sm ${productListingFilter === 'featured' ? 'btn-gold' : 'btn-secondary'}`}
+                    style={{ fontSize: '0.78rem', padding: '5px 12px' }}
+                  >
+                    ★ Featured ({products.filter((p) => p.featured).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProductListingFilter('rent')}
+                    className={`btn btn-sm ${productListingFilter === 'rent' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{
+                      fontSize: '0.78rem',
+                      padding: '5px 12px',
+                      background: productListingFilter === 'rent' ? '#7E22CE' : undefined,
+                      color: productListingFilter === 'rent' ? '#fff' : undefined,
+                      borderColor: productListingFilter === 'rent' ? '#7E22CE' : undefined,
+                    }}
+                  >
+                    🚜 Available for Rent ({products.filter((p) => getProductListingType(p) === 'rent' || getProductListingType(p) === 'both').length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProductListingFilter('sale')}
+                    className={`btn btn-sm ${productListingFilter === 'sale' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ fontSize: '0.78rem', padding: '5px 12px' }}
+                  >
+                    🌾 Direct Sale ({products.filter((p) => getProductListingType(p) === 'sale' || getProductListingType(p) === 'both').length})
+                  </button>
+                </div>
               </div>
 
               {/* Products Table */}
@@ -1745,7 +1829,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                       <th>Category</th>
                       <th>Price & Unit</th>
                       <th>Stock Status</th>
-                      <th>Featured</th>
+                      <th style={{ minWidth: '140px' }}>Featured & Rental Status</th>
                       <th style={{ textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
@@ -1787,11 +1871,65 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           </button>
                         </td>
                         <td>
-                          {p.featured ? (
-                            <span className="badge badge-gold">Featured</span>
-                          ) : (
-                            <span style={{ fontSize: '0.78rem', color: '#7A8B80' }}>Standard</span>
-                          )}
+                          {(() => {
+                            const listingType = getProductListingType(p);
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                                {p.featured ? (
+                                  <span
+                                    className="badge badge-gold"
+                                    style={{
+                                      fontSize: '0.72rem',
+                                      fontWeight: 800,
+                                      padding: '2px 8px',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                    }}
+                                  >
+                                    ★ FEATURED
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: '0.74rem', color: '#7A8B80' }}>Standard</span>
+                                )}
+
+                                {(listingType === 'rent' || listingType === 'both') && (
+                                  <span
+                                    className="badge"
+                                    style={{
+                                      background: listingType === 'both' ? '#E0F2FE' : '#F3E8FF',
+                                      color: listingType === 'both' ? '#0369A1' : '#7E22CE',
+                                      border: listingType === 'both' ? '1px solid #BAE6FD' : '1px solid #E9D5FF',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 700,
+                                      padding: '2px 8px',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                    }}
+                                  >
+                                    🚜 {listingType === 'both' ? 'Rent & Sale' : 'FOR RENT'}
+                                  </span>
+                                )}
+
+                                {listingType === 'sale' && (
+                                  <span
+                                    className="badge"
+                                    style={{
+                                      background: '#F0FAF4',
+                                      color: '#15733E',
+                                      border: '1px solid #D1E7DD',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 600,
+                                      padding: '2px 7px',
+                                    }}
+                                  >
+                                    🌾 Direct Sale
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           <div style={{ display: 'inline-flex', gap: '8px' }}>

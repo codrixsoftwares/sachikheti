@@ -121,13 +121,35 @@ export default function ProductCatalog({
     addToCart(product, 1);
   };
 
-  // On Home page, display all featured products marked by the admin (4 in a line horizontally)
+  const [homeFilter, setHomeFilter] = useState('all'); // 'all', 'featured', 'rent'
+
+  // Helper to determine if product is for rent or custom hiring
+  const isProductRental = (p) => {
+    if (!p) return false;
+    try {
+      if (p.specs) {
+        const s = typeof p.specs === 'string' ? JSON.parse(p.specs) : p.specs;
+        if (s.isForRent || s['Listing Type']?.toLowerCase().includes('rent')) return true;
+      }
+    } catch (e) {}
+    const unit = (p.unit || '').toLowerCase();
+    const cat = (p.category?.name || p.category?.slug || '').toLowerCase();
+    return unit.includes('acre') || unit.includes('hour') || unit.includes('day') || cat.includes('machin') || cat.includes('rent') || cat.includes('tool');
+  };
+
+  // On Home page, display all featured products AND all available for rent products (4 in a line horizontally)
   let displayedProducts = products;
   if (isHome) {
-    const featuredList = products.filter((p) => Boolean(p.featured));
-    // If the admin has marked products as featured, display all of them!
-    // Otherwise fallback to showing the products list.
-    displayedProducts = featuredList.length > 0 ? featuredList : products;
+    const featuredAndRental = products.filter((p) => Boolean(p.featured) || isProductRental(p));
+    const baseList = featuredAndRental.length > 0 ? featuredAndRental : products;
+
+    if (homeFilter === 'featured') {
+      displayedProducts = baseList.filter((p) => Boolean(p.featured));
+    } else if (homeFilter === 'rent') {
+      displayedProducts = baseList.filter((p) => isProductRental(p));
+    } else {
+      displayedProducts = baseList;
+    }
   }
 
   return (
@@ -145,14 +167,41 @@ export default function ProductCatalog({
                 gap: '6px',
               }}
             >
-              {isHome ? 'Featured Agricultural Catalogs' : 'LFPC Certified Catalog'}
+              {isHome ? 'Featured & Rental Agricultural Catalogs' : 'LFPC Certified Catalog'}
             </span>
             <h2 className="catalog-h2">Direct From Farm To Table</h2>
             <p className="catalog-subtitle">
               {isHome
-                ? 'Handcrafted pure dairy, desi sweets, organic produce, and agricultural machinery handpicked by LFPC.'
+                ? 'Handcrafted pure dairy, desi sweets, organic produce, and agricultural machinery available for rent or purchase.'
                 : 'Handcrafted pure dairy, farm-grade fertilizers, and reliable agricultural machinery.'}
             </p>
+
+            {/* Quick Home Filter Tabs: All, Featured, Available for Rent */}
+            {isHome && (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '14px' }}>
+                <button
+                  type="button"
+                  onClick={() => setHomeFilter('all')}
+                  className={`filter-chip ${homeFilter === 'all' ? 'active' : ''}`}
+                >
+                  <span>All Featured & Rental ({products.filter((p) => Boolean(p.featured) || isProductRental(p)).length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHomeFilter('featured')}
+                  className={`filter-chip ${homeFilter === 'featured' ? 'active' : ''}`}
+                >
+                  <span>★ Featured ({products.filter((p) => Boolean(p.featured)).length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHomeFilter('rent')}
+                  className={`filter-chip ${homeFilter === 'rent' ? 'active' : ''}`}
+                >
+                  <span>🚜 Available for Rent ({products.filter((p) => isProductRental(p)).length})</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Search Box (Full catalog view) */}
