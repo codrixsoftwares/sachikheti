@@ -33,7 +33,54 @@ const defaultBillDesign = {
   rentalTermsNotes: '1. Machinery is delivered in verified operational condition.\n2. Overdue usage beyond tenure incurs penalty at agreed rates.\n3. Fuel/Diesel & routine operational care is the responsibility of the hirer unless specified.\n4. Hirer is responsible for accidental damage caused by negligence.'
 };
 
+const defaultPaymentGateway = {
+  razorpayEnabled: false,
+  razorpayKeyId: process.env.RAZORPAY_KEY_ID || '',
+  razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET || '',
+  razorpayWebhookSecret: '',
+};
+
 export const getStoreBillDesign = () => readSettings();
+
+export const getPaymentGatewaySettings = () => {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const raw = fs.readFileSync(SETTINGS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return { ...defaultPaymentGateway, ...(parsed.paymentGateway || {}) };
+    }
+  } catch (err) {
+    console.warn('[Settings] Failed to read payment gateway settings, using defaults:', err.message);
+  }
+  return defaultPaymentGateway;
+};
+
+export const savePaymentGatewaySettings = (gatewayData) => {
+  const dir = path.dirname(SETTINGS_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  let current = {};
+  if (fs.existsSync(SETTINGS_FILE)) {
+    try {
+      current = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
+    } catch (e) {}
+  }
+  const existing = current.paymentGateway || defaultPaymentGateway;
+  const keySecretToSave = gatewayData.razorpayKeySecret && gatewayData.razorpayKeySecret.trim() !== ''
+    ? gatewayData.razorpayKeySecret.trim()
+    : (existing.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET || '');
+
+  current.paymentGateway = {
+    ...defaultPaymentGateway,
+    ...existing,
+    ...gatewayData,
+    razorpayKeySecret: keySecretToSave,
+    razorpayEnabled: Boolean(gatewayData.razorpayEnabled),
+  };
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(current, null, 2), 'utf-8');
+  return current.paymentGateway;
+};
 
 const readSettings = () => {
   try {
@@ -81,6 +128,68 @@ router.put('/bill-design', requireAdmin, (req, res) => {
       io.emit('settings:bill-design-updated', updated);
     }
     res.json({ success: true, data: updated, message: 'Bill design template saved successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/settings/payment-gateway
+router.get('/payment-gateway', (req, res) => {
+  const settings = getPaymentGatewaySettings();
+  res.json({
+    success: true,
+    data: {
+      razorpayEnabled: Boolean(settings.razorpayEnabled),
+      razorpayKeyId: settings.razorpayKeyId || '',
+      hasKeySecret: Boolean(settings.razorpayKeySecret && settings.razorpayKeySecret.trim()),
+      razorpayWebhookSecret: settings.razorpayWebhookSecret || '',
+    },
+  });
+});
+
+// PUT /api/settings/payment-gateway (Admin only)
+router.put('/payment-gateway', requireAdmin, (req, res) => {
+  try {
+    const { razorpayEnabled, razorpayKeyId, razorpayKeySecret, razorpayWebhookSecret } = req.body;
+
+    if (razorpayEnabled) {
+      if (!razorpayKeyId || !razorpayKeyId.trim()) {
+        return res.status(400).json({ success: false, message: 'Razorpay Key ID is required to enable online payments.' });
+      }
+      const existing = getPaymentGatewaySettings();
+      const hasSecret = (razorpayKeySecret && razorpayKeySecret.trim()) || (existing.razorpayKeySecret && existing.razorpayKeySecret.trim());
+      if (!hasSecret) {
+        return res.status(400).json({ success: false, message: 'Razorpay Key Secret is required to enable online payments.' });
+      }
+    }
+
+    const updated = savePaymentGatewaySettings({
+      razorpayEnabled,
+      razorpayKeyId: (razorpayKeyId || '').trim(),
+      razorpayKeySecret: (razorpayKeySecret || '').trim(),
+      razorpayWebhookSecret: (razorpayWebhookSecret || '').trim(),
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('settings:payment-gateway-updated', {
+        razorpayEnabled: updated.razorpayEnabled,
+        razorpayKeyId: updated.razorpayEnabled ? updated.razorpayKeyId : '',
+      });
+    }
+
+    res.json({
+      success: true,
+      message: updated.razorpayEnabled
+        ? '✓ Razorpay Payment Gateway activated successfully!'
+        : '✓ Online payments disabled. Store will operate in Cash on Delivery mode.',
+      data: {
+        razorpayEnabled: updated.razorpayEnabled,
+        razorpayKeyId: updated.razorpayKeyId,
+        hasKeySecret: Boolean(updated.razorpayKeySecret),
+        razorpayWebhookSecret: updated.razorpayWebhookSecret,
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

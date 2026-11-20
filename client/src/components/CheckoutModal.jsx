@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, MessageCircle, CreditCard, CheckCircle2, ShieldCheck, Loader2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { io } from 'socket.io-client';
 
 export default function CheckoutModal({ onClose }) {
   const { cartItems, subtotal, clearCart } = useCart();
@@ -18,6 +19,52 @@ export default function CheckoutModal({ onClose }) {
   const [loading, setLoading] = useState(false);
   const [completedOrder, setCompletedOrder] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [gatewayConfig, setGatewayConfig] = useState({ enabled: false, keyId: '' });
+
+  // Fetch dynamic Razorpay Gateway settings (Admin controlled)
+  useEffect(() => {
+    let isMounted = true;
+    const fetchGatewayConfig = async () => {
+      try {
+        const res = await fetch('/api/settings/payment-gateway');
+        const data = await res.json();
+        if (data.success && isMounted) {
+          const isEnabled = Boolean(data.data?.razorpayEnabled);
+          setGatewayConfig({
+            enabled: isEnabled,
+            keyId: data.data?.razorpayKeyId || '',
+          });
+          if (!isEnabled) {
+            setPaymentMethod('WHATSAPP');
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load payment gateway config:', err);
+      }
+    };
+
+    fetchGatewayConfig();
+
+    // Listen to real-time gateway updates
+    const socket = io();
+    socket.on('settings:payment-gateway-updated', (updated) => {
+      if (isMounted) {
+        const isEnabled = Boolean(updated?.razorpayEnabled);
+        setGatewayConfig({
+          enabled: isEnabled,
+          keyId: updated?.razorpayKeyId || '',
+        });
+        if (!isEnabled) {
+          setPaymentMethod('WHATSAPP');
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      socket.disconnect();
+    };
+  }, []);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -119,7 +166,8 @@ Please confirm my order and share estimated dispatch timing. Thanks!`;
         throw new Error(data.message || 'Failed to initialize payment gateway');
       }
 
-      const { razorpayOrder, keyId } = data.data;
+      const razorpayOrder = data.order || data.data?.razorpayOrder || data.data?.order;
+      const keyId = data.key || gatewayConfig.keyId || data.data?.keyId;
 
       // Check Razorpay loaded
       if (!window.Razorpay) {
@@ -130,13 +178,13 @@ Please confirm my order and share estimated dispatch timing. Thanks!`;
         key: keyId,
         amount: razorpayOrder.amount,
         currency: razorpayOrder.currency,
-        name: 'SachiKheti (LFPC)',
-        description: 'Pure Agricultural Produce & Vedic Dairy',
+        name: 'ਸੱਚੀ ਖੇਤੀ | SachiKheti (LFPC)',
+        description: 'Certified Pure Produce & Farm Machinery',
         image: '/assets/brand/sachi-kheti-emblem.jpg',
         order_id: razorpayOrder.id,
         handler: async function (response) {
           try {
-            // Verify payment on backend
+            // Verify payment on backend with HMAC SHA256
             const verifyRes = await fetch('/api/payment/razorpay/verify', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -147,11 +195,11 @@ Please confirm my order and share estimated dispatch timing. Thanks!`;
               }),
             });
             const verifyData = await verifyRes.json();
-            if (!verifyData.success) {
-              throw new Error('Payment signature verification failed.');
+            if (!verifyData.success || !verifyData.verified) {
+              throw new Error(verifyData.message || 'Payment signature verification failed.');
             }
 
-            // Save order to DB
+            // Save order to DB with 100% verified payment
             const orderRes = await fetch('/api/orders', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -167,7 +215,8 @@ Please confirm my order and share estimated dispatch timing. Thanks!`;
                 })),
                 totalAmount: subtotal,
                 paymentMethod: 'RAZORPAY',
-                paymentStatus: 'COMPLETED',
+                paymentStatus: 'PAID',
+                orderStatus: 'CONFIRMED',
                 razorpayId: response.razorpay_payment_id,
               }),
             });
@@ -180,6 +229,8 @@ Please confirm my order and share estimated dispatch timing. Thanks!`;
             }
           } catch (err) {
             setErrorMsg(err.message || 'Payment succeeded but order logging failed. Contact support.');
+          } finally {
+            setLoading(false);
           }
         },
         prefill: {
@@ -193,42 +244,13 @@ Please confirm my order and share estimated dispatch timing. Thanks!`;
 
       const rzp = new window.Razorpay(options);
       rzp.on('payment.failed', function (response) {
-        setErrorMsg(`Payment Failed: ${response.error.description}`);
+        setErrorMsg(`Payment Failed: ${response.error?.description || response.error?.reason || 'Transaction could not be completed'}`);
+        setLoading(false);
       });
       rzp.open();
     } catch (err) {
-      // Fallback for mock test mode
-      console.warn('Razorpay live checkout failed, creating test completed order:', err.message);
-      try {
-        const orderRes = await fetch('/api/orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
-            items: cartItems.map(item => ({
-              productId: item.id,
-              title: item.title,
-              titlePunjabi: item.titlePunjabi,
-              price: item.price,
-              quantity: item.quantity,
-              unit: item.unit,
-            })),
-            totalAmount: subtotal,
-            paymentMethod: 'RAZORPAY (TEST/SIMULATED)',
-            paymentStatus: 'COMPLETED',
-            razorpayId: `pay_mock_${Date.now()}`,
-          }),
-        });
-        const orderData = await orderRes.json();
-        if (orderData.success) {
-          setCompletedOrder(orderData.data);
-          clearCart();
-        } else {
-          setErrorMsg(orderData.message || 'Checkout failed');
-        }
-      } catch (e2) {
-        setErrorMsg('Checkout failed. Please try WhatsApp checkout.');
-      }
+      setErrorMsg(err.message || 'Failed to initiate Razorpay online checkout. Please try WhatsApp / Cash on Delivery.');
+      setLoading(false);
     } finally {
       setLoading(false);
     }
@@ -376,33 +398,36 @@ Please confirm my order and share estimated dispatch timing. Thanks!`;
                   Select Checkout Method:
                 </label>
                 <div className="checkout-payment-methods">
-                  {/* WhatsApp Option */}
+                  {/* WhatsApp Option (Always Available / Cash on Delivery) */}
                   <div
                     onClick={() => setPaymentMethod('WHATSAPP')}
                     className={`checkout-method-card ${paymentMethod === 'WHATSAPP' ? 'active-whatsapp' : ''}`}
+                    style={{ flex: gatewayConfig.enabled ? '1 1 200px' : '1 1 100%' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <MessageCircle size={20} color="#1EBE5D" />
-                      <strong style={{ fontSize: '0.95rem' }}>WhatsApp Checkout</strong>
+                      <strong style={{ fontSize: '0.95rem' }}>WhatsApp & Cash on Delivery</strong>
                     </div>
                     <span style={{ fontSize: '0.78rem', color: '#4A5B50', lineHeight: 1.3 }}>
-                      1-Click direct order to LFPC team. Pay via Cash on Delivery or UPI.
+                      1-Click direct order to LFPC team. Pay via Cash on Delivery or UPI upon receipt.
                     </span>
                   </div>
 
-                  {/* Razorpay Online */}
-                  <div
-                    onClick={() => setPaymentMethod('RAZORPAY')}
-                    className={`checkout-method-card ${paymentMethod === 'RAZORPAY' ? 'active-razorpay' : ''}`}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <CreditCard size={20} color="#15733E" />
-                      <strong style={{ fontSize: '0.95rem' }}>Prepaid Online</strong>
+                  {/* Razorpay Online (Strictly Controlled by Admin Mood / Toggle) */}
+                  {gatewayConfig.enabled && (
+                    <div
+                      onClick={() => setPaymentMethod('RAZORPAY')}
+                      className={`checkout-method-card ${paymentMethod === 'RAZORPAY' ? 'active-razorpay' : ''}`}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <CreditCard size={20} color="#15733E" />
+                        <strong style={{ fontSize: '0.95rem' }}>Prepaid Online (Razorpay)</strong>
+                      </div>
+                      <span style={{ fontSize: '0.78rem', color: '#4A5B50', lineHeight: 1.3 }}>
+                        Instant secure checkout via UPI, Google Pay, PhonePe, Cards & NetBanking.
+                      </span>
                     </div>
-                    <span style={{ fontSize: '0.78rem', color: '#4A5B50', lineHeight: 1.3 }}>
-                      Instant secure checkout via UPI, Google Pay, PhonePe, Cards & NetBanking.
-                    </span>
-                  </div>
+                  )}
                 </div>
               </div>
 

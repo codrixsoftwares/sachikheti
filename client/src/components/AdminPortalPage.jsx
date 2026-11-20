@@ -52,7 +52,10 @@ import {
   ArrowUpDown,
   Tractor,
   Timer,
-  AlertTriangle
+  AlertTriangle,
+  Lock,
+  EyeOff,
+  Key
 } from 'lucide-react';
 import {
   getSupabaseConfig,
@@ -199,6 +202,17 @@ export default function AdminPortalPage({ onNavigateHome }) {
   });
   const [savingBillDesign, setSavingBillDesign] = useState(false);
 
+  // Dynamic Razorpay Payment Gateway state (Admin controlled)
+  const [razorpaySettings, setRazorpaySettings] = useState({
+    razorpayEnabled: false,
+    razorpayKeyId: '',
+    razorpayKeySecret: '',
+    merchantName: 'ਸੱਚੀ ਖੇਤੀ | SachiKheti',
+    currency: 'INR',
+  });
+  const [showRazorpaySecret, setShowRazorpaySecret] = useState(false);
+  const [savingGateway, setSavingGateway] = useState(false);
+
   // Quick Stock & Quantity Adjustment Modal state
   const [stockModalProduct, setStockModalProduct] = useState(null);
   const [stockQuantityInput, setStockQuantityInput] = useState(50);
@@ -294,7 +308,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
       setLoadingData(true);
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [ordersRes, productsRes, categoriesRes, bannersRes, metricsRes, waRes, billDesignRes] = await Promise.all([
+      const [ordersRes, productsRes, categoriesRes, bannersRes, metricsRes, waRes, billDesignRes, gatewayRes] = await Promise.all([
         fetch('/api/orders', { headers }).then(r => r.json()).catch(() => ({ data: [] })),
         fetch('/api/products').then(r => r.json()).catch(() => ({ data: [] })),
         fetch('/api/categories').then(r => r.json()).catch(() => ({ data: [] })),
@@ -302,6 +316,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
         fetch('/api/admin/metrics', { headers }).then(r => r.json()).catch(() => null),
         fetch('/api/whatsapp/status').then(r => r.json()).catch(() => null),
         fetch('/api/settings/bill-design').then(r => r.json()).catch(() => null),
+        fetch('/api/settings/payment-gateway').then(r => r.json()).catch(() => null),
       ]);
 
       if (ordersRes.success) setOrders(ordersRes.data || []);
@@ -318,6 +333,9 @@ export default function AdminPortalPage({ onNavigateHome }) {
       }
       if (billDesignRes?.success && billDesignRes.data) {
         setBillDesign(prev => ({ ...prev, ...billDesignRes.data }));
+      }
+      if (gatewayRes?.success && gatewayRes.data) {
+        setRazorpaySettings(gatewayRes.data);
       }
     } catch (err) {
       console.error('Error refreshing admin data:', err);
@@ -391,6 +409,12 @@ export default function AdminPortalPage({ onNavigateHome }) {
       }
     };
 
+    const handleGatewayRealtime = (gwData) => {
+      if (gwData) {
+        setRazorpaySettings(gwData);
+      }
+    };
+
     socket.on('metrics:updated', handleMetricsUpdate);
     socket.on('orders:updated', handleOrderRealtime);
     socket.on('categories:updated', handleGenericRefresh);
@@ -399,6 +423,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
     socket.on('banners:updated', handleGenericRefresh);
     socket.on('whatsapp:status', handleWhatsAppRealtime);
     socket.on('settings:bill-design-updated', handleBillDesignRealtime);
+    socket.on('settings:payment-gateway-updated', handleGatewayRealtime);
 
     return () => {
       socket.off('connect', onConnect);
@@ -411,6 +436,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
       socket.off('banners:updated', handleGenericRefresh);
       socket.off('whatsapp:status', handleWhatsAppRealtime);
       socket.off('settings:bill-design-updated', handleBillDesignRealtime);
+      socket.off('settings:payment-gateway-updated', handleGatewayRealtime);
     };
   }, [token]);
 
@@ -1615,6 +1641,36 @@ export default function AdminPortalPage({ onNavigateHome }) {
     }
   };
 
+  const handleSavePaymentGateway = async (e) => {
+    if (e) e.preventDefault();
+    setSavingGateway(true);
+    try {
+      const res = await fetch('/api/settings/payment-gateway', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(razorpaySettings)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRazorpaySettings(data.data);
+        setActionSuccess(data.data.razorpayEnabled
+          ? '✓ Razorpay Payment Gateway activated! Online payment options are now LIVE on checkout.'
+          : '✓ Razorpay Gateway disabled. Online payment options are now completely HIDDEN from checkout.'
+        );
+        setTimeout(() => setActionSuccess(''), 5000);
+      } else {
+        alert(data.message || 'Failed to save payment gateway settings');
+      }
+    } catch (err) {
+      alert('Error saving payment gateway settings: ' + err.message);
+    } finally {
+      setSavingGateway(false);
+    }
+  };
+
   // ==========================================
   // ORDER STATUS UPDATE HANDLER
   // ==========================================
@@ -2756,15 +2812,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={() => setShowCustomItemModal(true)}
-                    className="btn btn-secondary btn-sm"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '6px 12px', fontSize: '0.8rem' }}
-                  >
-                    <Plus size={15} />
-                    <span>+ Custom Item</span>
-                  </button>
                   {billingCart.length > 0 && (
                     <button
                       type="button"
@@ -3928,10 +3975,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
                     <History size={16} />
                     <span>Past Orders & Bills ({orders.length})</span>
                   </button>
-                  <button onClick={openAddOrderModal} className="btn btn-primary">
-                    <Plus size={16} />
-                    <span>Create Manual Order</span>
-                  </button>
                 </div>
               </div>
 
@@ -4093,132 +4136,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   flexDirection: 'column',
                 }}
               >
-                {/* 1. EXCEL WORKBOOK TITLE BAR (Branded in SachiKheti Green #15733E) */}
-                <div
-                  style={{
-                    background: '#15733E',
-                    color: '#FFFFFF',
-                    padding: '8px 16px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: '12px',
-                    borderBottom: '2px solid #0D522C',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div
-                      style={{
-                        background: '#0D522C',
-                        color: '#FFFFFF',
-                        width: '30px',
-                        height: '30px',
-                        borderRadius: '6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 900,
-                        fontSize: '1rem',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
-                        border: '1px solid #22C55E',
-                      }}
-                      title="SachiKheti Excel Financial Workbook"
-                    >
-                      X
-                    </div>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontWeight: 800, fontSize: '0.96rem', letterSpacing: '0.2px' }}>
-                          SachiKheti_Sales_Ledger_2026.xlsx
-                        </span>
-                        <span
-                          style={{
-                            fontSize: '0.68rem',
-                            padding: '1px 6px',
-                            borderRadius: '10px',
-                            background: '#0D522C',
-                            color: '#BBF7D0',
-                            fontWeight: 700,
-                          }}
-                        >
-                          ● Cloud AutoSave [ON]
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: '#DCFCE7' }}>
-                        Financial Audit Ledger • Direct Farm Produce & Machinery Rental Hiring Accounts
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Quick Excel Action Buttons in Title Bar */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button
-                      type="button"
-                      onClick={exportHistoryToCSV}
-                      style={{
-                        background: '#0D522C',
-                        color: '#FFFFFF',
-                        border: '1px solid #22C55E',
-                        borderRadius: '6px',
-                        padding: '6px 12px',
-                        fontSize: '0.78rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        transition: 'background 0.15s ease',
-                      }}
-                      title="Export full ledger as CSV / XLSX file"
-                    >
-                      <Download size={14} />
-                      <span>Export .XLSX / CSV</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('customer-store')}
-                      style={{
-                        background: '#FFFFFF',
-                        color: '#15733E',
-                        border: 'none',
-                        borderRadius: '6px',
-                        padding: '6px 12px',
-                        fontSize: '0.78rem',
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-                      }}
-                    >
-                      <Plus size={14} />
-                      <span>+ Insert POS Bill</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={loadAllData}
-                      style={{
-                        background: '#0D522C',
-                        color: '#FFFFFF',
-                        border: '1px solid #22C55E',
-                        borderRadius: '6px',
-                        padding: '6px 10px',
-                        fontSize: '0.78rem',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                      }}
-                      title="Sync / Refresh Data"
-                    >
-                      <RefreshCw size={14} />
-                    </button>
-                  </div>
-                </div>
-
                 {/* 2. EXCEL RIBBON TOOLBAR & KPI SUMMARY BAR */}
                 <div
                   style={{
@@ -4304,71 +4221,117 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   </div>
 
                   {/* 3. EXCEL FORMULA BAR (fx) */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      background: '#FFFFFF',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '6px',
-                      fontSize: '0.78rem',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {/* Name Box */}
-                    <div
-                      style={{
-                        padding: '6px 12px',
-                        background: '#F3F4F6',
-                        borderRight: '1px solid #D1D5DB',
-                        fontWeight: 800,
-                        color: '#374151',
-                        fontFamily: 'monospace',
-                        minWidth: '95px',
-                        textAlign: 'center',
-                      }}
-                    >
-                      {selectedHistoryRowId
-                        ? `ROW_${orders.findIndex((o) => o.id === selectedHistoryRowId) + 1}`
-                        : `A1:I${filteredHistory.length}`}
-                    </div>
-
-                    {/* fx symbol */}
-                    <div
-                      style={{
-                        padding: '6px 10px',
-                        borderRight: '1px solid #D1D5DB',
-                        fontWeight: 900,
-                        fontStyle: 'italic',
-                        color: '#15733E',
-                        fontFamily: 'serif',
-                      }}
-                    >
-                      fx
-                    </div>
-
-                    {/* Formula Content */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div
                       style={{
                         flex: 1,
-                        padding: '6px 12px',
-                        color: '#1F2937',
-                        fontFamily: 'monospace',
-                        whiteSpace: 'nowrap',
+                        display: 'flex',
+                        alignItems: 'center',
+                        background: '#FFFFFF',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '6px',
+                        fontSize: '0.78rem',
                         overflow: 'hidden',
-                        textOverflow: 'ellipsis',
                       }}
                     >
-                      {selectedOrderRecord ? (
-                        <span>
-                          <strong>SELECTED_ROW:</strong> #{selectedOrderRecord.orderNumber} | <strong>FARMER:</strong> {selectedOrderRecord.customerName} ({selectedOrderRecord.customerPhone}) | <strong>GROSS:</strong> ₹{selectedOrderRecord.totalAmount?.toLocaleString('en-IN')} | <strong>PAYMENT:</strong> {selectedOrderRecord.paymentMethod} ({selectedOrderRecord.paymentStatus})
-                        </span>
-                      ) : (
-                        <span>
-                          =SUM(F2:F{filteredHistory.length + 1}) ➔ <strong>₹{filteredHistory.reduce((s, o) => s + (o.totalAmount || 0), 0).toLocaleString('en-IN')}</strong> | =COUNT({filteredHistory.length} bills) | =SETTLED(₹{filteredHistory.filter((o) => (o.paymentStatus || '').toUpperCase() === 'PAID').reduce((s, o) => s + (o.totalAmount || 0), 0).toLocaleString('en-IN')}) | =DUE(₹{filteredHistory.filter((o) => (o.paymentStatus || '').toUpperCase() === 'PENDING').reduce((s, o) => s + (o.totalAmount || 0), 0).toLocaleString('en-IN')})
-                        </span>
-                      )}
+                      {/* Name Box */}
+                      <div
+                        style={{
+                          padding: '6px 12px',
+                          background: '#F3F4F6',
+                          borderRight: '1px solid #D1D5DB',
+                          fontWeight: 800,
+                          color: '#374151',
+                          fontFamily: 'monospace',
+                          minWidth: '95px',
+                          textAlign: 'center',
+                        }}
+                      >
+                        {selectedHistoryRowId
+                          ? `ROW_${orders.findIndex((o) => o.id === selectedHistoryRowId) + 1}`
+                          : `A1:I${filteredHistory.length}`}
+                      </div>
+
+                      {/* fx symbol */}
+                      <div
+                        style={{
+                          padding: '6px 10px',
+                          borderRight: '1px solid #D1D5DB',
+                          fontWeight: 900,
+                          fontStyle: 'italic',
+                          color: '#15733E',
+                          fontFamily: 'serif',
+                        }}
+                      >
+                        fx
+                      </div>
+
+                      {/* Formula Content */}
+                      <div
+                        style={{
+                          flex: 1,
+                          padding: '6px 12px',
+                          color: '#1F2937',
+                          fontFamily: 'monospace',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {selectedOrderRecord ? (
+                          <span>
+                            <strong>SELECTED_ROW:</strong> #{selectedOrderRecord.orderNumber} | <strong>FARMER:</strong> {selectedOrderRecord.customerName} ({selectedOrderRecord.customerPhone}) | <strong>GROSS:</strong> ₹{selectedOrderRecord.totalAmount?.toLocaleString('en-IN')} | <strong>PAYMENT:</strong> {selectedOrderRecord.paymentMethod} ({selectedOrderRecord.paymentStatus})
+                          </span>
+                        ) : (
+                          <span>
+                            =SUM(F2:F{filteredHistory.length + 1}) ➔ <strong>₹{filteredHistory.reduce((s, o) => s + (o.totalAmount || 0), 0).toLocaleString('en-IN')}</strong> | =COUNT({filteredHistory.length} bills) | =SETTLED(₹{filteredHistory.filter((o) => (o.paymentStatus || '').toUpperCase() === 'PAID').reduce((s, o) => s + (o.totalAmount || 0), 0).toLocaleString('en-IN')}) | =DUE(₹{filteredHistory.filter((o) => (o.paymentStatus || '').toUpperCase() === 'PENDING').reduce((s, o) => s + (o.totalAmount || 0), 0).toLocaleString('en-IN')})
+                          </span>
+                        )}
+                      </div>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={exportHistoryToCSV}
+                      className="btn btn-secondary btn-sm"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: '#0D522C',
+                        color: '#FFFFFF',
+                        border: '1px solid #22C55E',
+                        fontWeight: 700,
+                        fontSize: '0.78rem',
+                        padding: '6px 12px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title="Export full ledger as CSV / XLSX file"
+                    >
+                      <Download size={13} />
+                      <span>Export .CSV</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={loadAllData}
+                      className="btn btn-secondary btn-sm"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '6px 10px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                      }}
+                      title="Refresh Ledger"
+                    >
+                      <RefreshCw size={13} />
+                    </button>
                   </div>
                 </div>
 
@@ -5086,6 +5049,25 @@ export default function AdminPortalPage({ onNavigateHome }) {
                 >
                   <Palette size={16} />
                   <span>Customized Bill Design</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSettingsSubTab('payments')}
+                  className={`btn btn-sm ${settingsSubTab === 'payments' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '0.86rem' }}
+                >
+                  <CreditCard size={16} />
+                  <span>Razorpay Payment Gateway</span>
+                  {razorpaySettings.razorpayEnabled ? (
+                    <span style={{ fontSize: '0.72rem', background: '#D1FAE5', color: '#065F46', padding: '2px 8px', borderRadius: '12px', fontWeight: 800 }}>
+                      Live Active
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '0.72rem', background: '#F3F4F6', color: '#6B7280', padding: '2px 8px', borderRadius: '12px', fontWeight: 800 }}>
+                      Disabled
+                    </span>
+                  )}
                 </button>
               </div>
 
@@ -5809,6 +5791,286 @@ export default function AdminPortalPage({ onNavigateHome }) {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* SUB-TAB 4: RAZORPAY PAYMENT GATEWAY SETTINGS */}
+              {settingsSubTab === 'payments' && (
+                <div style={{ maxWidth: '840px' }}>
+                  {/* Master Status & Admin Mood Control Card */}
+                  <div
+                    style={{
+                      background: '#FFFFFF',
+                      borderRadius: '16px',
+                      border: '1px solid #E5E7EB',
+                      padding: '24px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                      marginBottom: '20px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: '280px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                          <div
+                            style={{
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '10px',
+                              background: razorpaySettings.razorpayEnabled ? '#E8F5E9' : '#F3F4F6',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: razorpaySettings.razorpayEnabled ? '#15733E' : '#6B7280',
+                            }}
+                          >
+                            <CreditCard size={22} />
+                          </div>
+                          <div>
+                            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#1B2E23' }}>
+                              Online Payment Gateway (Razorpay)
+                            </h3>
+                            <div style={{ fontSize: '0.8rem', color: '#6B7280', marginTop: '2px' }}>
+                              Collect prepaid UPI (Google Pay, PhonePe, Paytm), Debit Cards, and Netbanking.
+                            </div>
+                          </div>
+                        </div>
+
+                        <p style={{ fontSize: '0.84rem', color: '#4B5563', lineHeight: 1.5, margin: '12px 0 0' }}>
+                          {razorpaySettings.razorpayEnabled
+                            ? 'Online Payments are currently ENABLED. Customers will see Razorpay at checkout and orders will only finalize after 100% verified payment.'
+                            : 'Online Payments are currently DISABLED. The Razorpay card is completely HIDDEN from customer checkout. Orders are strictly Cash on Delivery or WhatsApp.'}
+                        </p>
+                      </div>
+
+                      {/* Master Checkbox Switch (Default OFF) */}
+                      <label
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          cursor: 'pointer',
+                          padding: '12px 18px',
+                          borderRadius: '12px',
+                          background: razorpaySettings.razorpayEnabled ? '#F0FDF4' : '#F9FAFB',
+                          border: razorpaySettings.razorpayEnabled ? '2px solid #16A34A' : '2px solid #E5E7EB',
+                          userSelect: 'none',
+                          transition: 'all 0.2s ease',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(razorpaySettings.razorpayEnabled)}
+                          onChange={(e) => {
+                            const enabled = e.target.checked;
+                            setRazorpaySettings({ ...razorpaySettings, razorpayEnabled: enabled });
+                          }}
+                          style={{
+                            width: '22px',
+                            height: '22px',
+                            accentColor: '#15733E',
+                            cursor: 'pointer',
+                          }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: '0.92rem', color: razorpaySettings.razorpayEnabled ? '#15733E' : '#374151' }}>
+                            {razorpaySettings.razorpayEnabled ? 'Gateway Is ACTIVE' : 'Enable Online Payments'}
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: '#6B7280' }}>
+                            {razorpaySettings.razorpayEnabled ? 'Click to disable' : 'Initially unchecked (OFF)'}
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Dynamic Real-time Storefront Status Banner */}
+                    <div
+                      style={{
+                        marginTop: '18px',
+                        padding: '12px 16px',
+                        borderRadius: '10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        fontSize: '0.84rem',
+                        fontWeight: 600,
+                        background: razorpaySettings.razorpayEnabled ? '#ECFDF5' : '#F9FAFB',
+                        border: razorpaySettings.razorpayEnabled ? '1px solid #A7F3D0' : '1px solid #E5E7EB',
+                        color: razorpaySettings.razorpayEnabled ? '#065F46' : '#6B7280',
+                      }}
+                    >
+                      {razorpaySettings.razorpayEnabled ? (
+                        <>
+                          <CheckCircle size={18} color="#16A34A" style={{ flexShrink: 0 }} />
+                          <span>Storefront Status: Online checkout active. Orders confirm after 100% cryptographic signature check.</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck size={18} color="#9CA3AF" style={{ flexShrink: 0 }} />
+                          <span>Storefront Status: All online payment buttons are hidden from customers. Cash on Delivery is active.</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Credentials & Configuration Form (Visible when admin toggles gateway ON) */}
+                  {razorpaySettings.razorpayEnabled && (
+                    <div
+                      style={{
+                        background: '#FFFFFF',
+                        borderRadius: '16px',
+                        border: '1px solid #E5E7EB',
+                        padding: '24px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                        marginBottom: '20px',
+                      }}
+                    >
+                      <h4 style={{ margin: '0 0 16px', fontSize: '1rem', fontWeight: 800, color: '#1B2E23', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Key size={18} color="#15733E" />
+                        <span>Razorpay API Credentials</span>
+                      </h4>
+
+                      <form onSubmit={handleSavePaymentGateway}>
+                        <div className="form-group" style={{ marginBottom: '16px' }}>
+                          <label className="form-label" style={{ fontWeight: 700, fontSize: '0.86rem' }}>
+                            Razorpay Key ID *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={razorpaySettings.razorpayKeyId || ''}
+                            onChange={(e) => setRazorpaySettings({ ...razorpaySettings, razorpayKeyId: e.target.value.trim() })}
+                            className="form-input"
+                            placeholder="e.g. rzp_live_xxxxxxxxxxxxxx or rzp_test_xxxxxxxxxxxxxx"
+                            style={{ fontFamily: 'monospace', fontSize: '0.9rem' }}
+                          />
+                          <div style={{ fontSize: '0.74rem', color: '#6B7280', marginTop: '4px' }}>
+                            Found under Razorpay Dashboard → Settings → API Keys → Key ID.
+                          </div>
+                        </div>
+
+                        <div className="form-group" style={{ marginBottom: '16px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <label className="form-label" style={{ margin: 0, fontWeight: 700, fontSize: '0.86rem' }}>
+                              Razorpay Key Secret *
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => setShowRazorpaySecret(!showRazorpaySecret)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#15733E',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                            >
+                              {showRazorpaySecret ? <EyeOff size={13} /> : <Eye size={13} />}
+                              <span>{showRazorpaySecret ? 'Hide Secret' : 'Show Secret'}</span>
+                            </button>
+                          </div>
+                          <div style={{ position: 'relative' }}>
+                            <input
+                              type={showRazorpaySecret ? 'text' : 'password'}
+                              required
+                              value={razorpaySettings.razorpayKeySecret || ''}
+                              onChange={(e) => setRazorpaySettings({ ...razorpaySettings, razorpayKeySecret: e.target.value.trim() })}
+                              className="form-input"
+                              placeholder="Razorpay Key Secret from dashboard"
+                              style={{ fontFamily: 'monospace', fontSize: '0.9rem', paddingRight: '40px' }}
+                            />
+                            <div style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }}>
+                              <Lock size={16} />
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: '#6B7280', marginTop: '4px' }}>
+                            Used for backend HMAC-SHA256 signature verification. Kept encrypted on your server.
+                          </div>
+                        </div>
+
+                        <div className="checkout-grid-2col" style={{ marginBottom: '16px' }}>
+                          <div className="form-group">
+                            <label className="form-label" style={{ fontWeight: 700, fontSize: '0.86rem' }}>
+                              Merchant Display Name
+                            </label>
+                            <input
+                              type="text"
+                              value={razorpaySettings.merchantName || 'ਸੱਚੀ ਖੇਤੀ | SachiKheti'}
+                              onChange={(e) => setRazorpaySettings({ ...razorpaySettings, merchantName: e.target.value })}
+                              className="form-input"
+                              placeholder="e.g. SachiKheti LFPC Ltd."
+                            />
+                          </div>
+
+                          <div className="form-group">
+                            <label className="form-label" style={{ fontWeight: 700, fontSize: '0.86rem' }}>
+                              Store Currency
+                            </label>
+                            <input
+                              type="text"
+                              disabled
+                              value={razorpaySettings.currency || 'INR'}
+                              className="form-input"
+                              style={{ background: '#F3F4F6', color: '#6B7280' }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Security Notice Card */}
+                        <div
+                          style={{
+                            background: '#F0FDF4',
+                            border: '1px solid #BBF7D0',
+                            borderRadius: '10px',
+                            padding: '14px 16px',
+                            marginBottom: '20px',
+                            display: 'flex',
+                            gap: '12px',
+                            alignItems: 'flex-start',
+                          }}
+                        >
+                          <ShieldCheck size={22} color="#15733E" style={{ flexShrink: 0, marginTop: '2px' }} />
+                          <div style={{ fontSize: '0.8rem', color: '#166534', lineHeight: 1.5 }}>
+                            <strong>100% Secure Payment Architecture:</strong>
+                            <div style={{ marginTop: '2px' }}>
+                              Online orders are placed only after the Razorpay checkout completes and the server independently validates the cryptographic HMAC-SHA256 signature against your Key Secret. No fraudulent or unpaid orders can ever be confirmed.
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                          <button
+                            type="submit"
+                            disabled={savingGateway}
+                            className="btn btn-primary"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 22px' }}
+                          >
+                            {savingGateway ? <RefreshCw size={16} className="spin" /> : <CheckCircle size={16} />}
+                            <span>Save & Activate Razorpay Gateway</span>
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
+
+                  {/* Quick Action when Disabled to Save the OFF state */}
+                  {!razorpaySettings.razorpayEnabled && (
+                    <div style={{ textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        onClick={handleSavePaymentGateway}
+                        disabled={savingGateway}
+                        className="btn btn-secondary"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                      >
+                        {savingGateway ? <RefreshCw size={14} className="spin" /> : <Check size={14} />}
+                        <span>Confirm Online Payments Disabled</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -7313,83 +7575,6 @@ export default function AdminPortalPage({ onNavigateHome }) {
         </div>
       )}
 
-      {/* ==================================================== */}
-      {/* CUSTOM AD-HOC LINE ITEM MODAL                        */}
-      {/* ==================================================== */}
-      {showCustomItemModal && (
-        <div className="modal-overlay" style={{ zIndex: 650 }}>
-          <div className="modal-content" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: '#1B2E23' }}>
-                Add Custom Line Item
-              </h3>
-              <button onClick={() => setShowCustomItemModal(false)} className="modal-close-btn" type="button">
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddCustomItem}>
-              <div className="form-group">
-                <label className="form-label">Item / Service Description *</label>
-                <input
-                  type="text"
-                  required
-                  value={customItemForm.title}
-                  onChange={(e) => setCustomItemForm({ ...customItemForm, title: e.target.value })}
-                  className="form-input"
-                  placeholder="e.g. Field Leveling Extra Hours or Bulk Packaging"
-                />
-              </div>
-
-              <div className="checkout-grid-2col">
-                <div className="form-group">
-                  <label className="form-label">Unit Specification</label>
-                  <input
-                    type="text"
-                    value={customItemForm.unit}
-                    onChange={(e) => setCustomItemForm({ ...customItemForm, unit: e.target.value })}
-                    className="form-input"
-                    placeholder="e.g. Hour, Acre, Bag, Service"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Unit Rate (₹) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={customItemForm.price}
-                    onChange={(e) => setCustomItemForm({ ...customItemForm, price: e.target.value })}
-                    className="form-input"
-                    placeholder="e.g. 500"
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Quantity</label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  value={customItemForm.quantity}
-                  onChange={(e) => setCustomItemForm({ ...customItemForm, quantity: e.target.value })}
-                  className="form-input"
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
-                <button type="button" onClick={() => setShowCustomItemModal(false)} className="btn btn-secondary">
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Add Item to Cart
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       {/* ==================================================== */}
       {/* STOCK & QUANTITY ADJUSTMENT MODAL                    */}
       {/* ==================================================== */}
