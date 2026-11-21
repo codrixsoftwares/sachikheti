@@ -505,7 +505,7 @@ export default function Navbar({
             </button>
 
             <a
-              href="https://wa.me/918295886832?text=Hello%20SachiKheti!%20I%20would%20like%20to%20inquire%20about%20your%20products."
+              href="https://wa.me/918360253372?text=Hello%20SachiKheti!%20I%20would%20like%20to%20inquire%20about%20your%20products."
               target="_blank"
               rel="noreferrer"
               className="btn btn-whatsapp"

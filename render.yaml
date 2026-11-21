@@ -19,7 +19,7 @@ services:
       - key: ADMIN_PASSWORD
         value: Sachi@Kheti123
       - key: WHATSAPP_PHONE
-        value: "918295886832"
+        value: "918360253372"
       - key: RAZORPAY_KEY_ID
         value: rzp_test_mock_sachikheti
       - key: RAZORPAY_KEY_SECRET

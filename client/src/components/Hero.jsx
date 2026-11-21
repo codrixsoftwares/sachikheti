@@ -4,7 +4,7 @@ import { ArrowRight, MessageCircle, CheckCircle2 } from 'lucide-react';
 export default function Hero({ onExploreClick, onNavigateStory }) {
   const openDirectWhatsApp = () => {
     const text = encodeURIComponent("Hello SachiKheti (LFPC) Team! I would like to inquire about your pure farm products and place an order.");
-    window.open(`https://wa.me/918295886832?text=${text}`, '_blank');
+    window.open(`https://wa.me/918360253372?text=${text}`, '_blank');
   };
 
   return (

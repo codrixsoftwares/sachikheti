@@ -78,7 +78,7 @@ export default function LeadersPage({ onExploreClick }) {
             </div>
             <div className="leaders-cta-actions">
               <a
-                href="https://wa.me/918295886832?text=Hello%20LFPC%20Directors!%20I%20would%20like%20to%20connect%20regarding%20Lamma%20Farmer%20Producer%20Co.%20Ltd."
+                href="https://wa.me/918360253372?text=Hello%20LFPC%20Directors!%20I%20would%20like%20to%20connect%20regarding%20Lamma%20Farmer%20Producer%20Co.%20Ltd."
                 target="_blank"
                 rel="noreferrer"
                 className="btn btn-whatsapp btn-md"

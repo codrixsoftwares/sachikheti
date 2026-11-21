@@ -40,6 +40,49 @@ const defaultPaymentGateway = {
   razorpayWebhookSecret: '',
 };
 
+export const defaultStoreContact = {
+  phone: '8360253372',
+  displayPhone: '+91 8360253372',
+  whatsappNumber: '8360253372',
+  email: 'codeverse114@gmail.com',
+  address: '1st Floor, Aggerwal Colony, Fatehabad, Haryana, India - 125050',
+  facebookUrl: 'https://www.facebook.com/share/1XymBg6n78/?mibextid=wwXIfr',
+  instagramUrl: 'https://www.instagram.com/sachi_kheti?evlk=MWJuaXc1MGk4NGo3aw%3D%3D&utm_source=qr',
+};
+
+export const getStoreContact = () => {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const raw = fs.readFileSync(SETTINGS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return { ...defaultStoreContact, ...(parsed.contact || {}) };
+    }
+  } catch (err) {
+    console.warn('[Settings] Failed to read contact settings:', err.message);
+  }
+  return defaultStoreContact;
+};
+
+export const saveStoreContact = (contactData) => {
+  const dir = path.dirname(SETTINGS_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  let current = {};
+  if (fs.existsSync(SETTINGS_FILE)) {
+    try {
+      current = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
+    } catch (e) {}
+  }
+  current.contact = {
+    ...defaultStoreContact,
+    ...(current.contact || {}),
+    ...contactData,
+  };
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(current, null, 2), 'utf-8');
+  return current.contact;
+};
+
 export const getStoreBillDesign = () => readSettings();
 
 export const getPaymentGatewaySettings = () => {
@@ -189,6 +232,30 @@ router.put('/payment-gateway', requireAdmin, (req, res) => {
         hasKeySecret: Boolean(updated.razorpayKeySecret),
         razorpayWebhookSecret: updated.razorpayWebhookSecret,
       },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/settings/contact (Public)
+router.get('/contact', (req, res) => {
+  const contact = getStoreContact();
+  res.json({ success: true, data: contact });
+});
+
+// PUT /api/settings/contact (Admin only)
+router.put('/contact', requireAdmin, (req, res) => {
+  try {
+    const updated = saveStoreContact(req.body);
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('settings:contact-updated', updated);
+    }
+    res.json({
+      success: true,
+      message: '✓ Store contact details & social links updated successfully!',
+      data: updated,
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

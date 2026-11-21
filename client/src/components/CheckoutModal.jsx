@@ -128,7 +128,7 @@ ${itemsList}
 Please confirm my order and share estimated dispatch timing. Thanks!`;
 
       // Open WhatsApp
-      window.open(`https://wa.me/918295886832?text=${encodeURIComponent(message)}`, '_blank');
+      window.open(`https://wa.me/918360253372?text=${encodeURIComponent(message)}`, '_blank');
 
       setCompletedOrder({ ...data.data, orderNumber });
       clearCart();

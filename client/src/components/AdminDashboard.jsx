@@ -652,10 +652,11 @@ export default function AdminDashboard({ onClose }) {
                 <input
                   type="text"
                   required
+                  name="admin_username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="form-input"
-                  autoComplete="username"
+                  autoComplete="off"
                   placeholder="Enter admin username"
                 />
               </div>
@@ -666,10 +667,11 @@ export default function AdminDashboard({ onClose }) {
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
+                    name="admin_password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="form-input"
-                    autoComplete="current-password"
+                    autoComplete="new-password"
                     placeholder="Enter admin password"
                     style={{ paddingRight: '44px' }}
                   />

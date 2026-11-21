@@ -24,7 +24,7 @@ export default function ContactPage() {
     const msg = encodeURIComponent(
       `Hello SachiKheti (LFPC) Team!\n\n*Direct Inquiry Form Submission:*\n- *Name:* ${formData.name}\n- *Phone:* ${formData.phone}\n- *Email:* ${formData.email || 'N/A'}\n- *Subject:* ${formData.subject}\n- *Message:* ${formData.message}`
     );
-    window.open(`https://wa.me/918295886832?text=${msg}`, '_blank');
+    window.open(`https://wa.me/918360253372?text=${msg}`, '_blank');
     setSubmitted(true);
   };
 
@@ -81,10 +81,10 @@ export default function ContactPage() {
                   </div>
                 </div>
                 <p className="contact-card-body">
-                  <a href="tel:+918295886832" className="contact-link">+91-8295886832</a>
+                  <a href="tel:+918360253372" className="contact-link">+91-8360253372</a>
                 </p>
                 <a
-                  href="https://wa.me/918295886832?text=Hello%20SachiKheti!%20I%20have%20an%20inquiry%20regarding%20your%20products."
+                  href="https://wa.me/918360253372?text=Hello%20SachiKheti!%20I%20have%20an%20inquiry%20regarding%20your%20products."
                   target="_blank"
                   rel="noreferrer"
                   className="btn btn-whatsapp btn-sm contact-whatsapp-btn"

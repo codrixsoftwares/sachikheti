@@ -214,6 +214,18 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const [showRazorpaySecret, setShowRazorpaySecret] = useState(false);
   const [savingGateway, setSavingGateway] = useState(false);
 
+  // Store Contact & Social Media state (Admin controlled)
+  const [storeContact, setStoreContact] = useState({
+    phone: '8360253372',
+    displayPhone: '+91 8360253372',
+    whatsappNumber: '8360253372',
+    email: 'codeverse114@gmail.com',
+    address: '1st Floor, Aggerwal Colony, Fatehabad, Haryana, India - 125050',
+    facebookUrl: 'https://www.facebook.com/share/1XymBg6n78/?mibextid=wwXIfr',
+    instagramUrl: 'https://www.instagram.com/sachi_kheti?evlk=MWJuaXc1MGk4NGo3aw%3D%3D&utm_source=qr',
+  });
+  const [savingContact, setSavingContact] = useState(false);
+
   // Quick Stock & Quantity Adjustment Modal state
   const [stockModalProduct, setStockModalProduct] = useState(null);
   const [stockQuantityInput, setStockQuantityInput] = useState(50);
@@ -309,7 +321,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
       setLoadingData(true);
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [ordersRes, productsRes, categoriesRes, bannersRes, metricsRes, waRes, billDesignRes, gatewayRes] = await Promise.all([
+      const [ordersRes, productsRes, categoriesRes, bannersRes, metricsRes, waRes, billDesignRes, gatewayRes, contactRes] = await Promise.all([
         fetch('/api/orders', { headers }).then(r => r.json()).catch(() => ({ data: [] })),
         fetch('/api/products').then(r => r.json()).catch(() => ({ data: [] })),
         fetch('/api/categories').then(r => r.json()).catch(() => ({ data: [] })),
@@ -318,6 +330,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
         fetch('/api/whatsapp/status').then(r => r.json()).catch(() => null),
         fetch('/api/settings/bill-design').then(r => r.json()).catch(() => null),
         fetch('/api/settings/payment-gateway').then(r => r.json()).catch(() => null),
+        fetch('/api/settings/contact').then(r => r.json()).catch(() => null),
       ]);
 
       if (ordersRes.success) setOrders(ordersRes.data || []);
@@ -337,6 +350,9 @@ export default function AdminPortalPage({ onNavigateHome }) {
       }
       if (gatewayRes?.success && gatewayRes.data) {
         setRazorpaySettings(gatewayRes.data);
+      }
+      if (contactRes?.success && contactRes.data) {
+        setStoreContact(prev => ({ ...prev, ...contactRes.data }));
       }
     } catch (err) {
       console.error('Error refreshing admin data:', err);
@@ -416,6 +432,12 @@ export default function AdminPortalPage({ onNavigateHome }) {
       }
     };
 
+    const handleContactRealtime = (contactData) => {
+      if (contactData) {
+        setStoreContact(prev => ({ ...prev, ...contactData }));
+      }
+    };
+
     socket.on('metrics:updated', handleMetricsUpdate);
     socket.on('orders:updated', handleOrderRealtime);
     socket.on('categories:updated', handleGenericRefresh);
@@ -425,6 +447,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
     socket.on('whatsapp:status', handleWhatsAppRealtime);
     socket.on('settings:bill-design-updated', handleBillDesignRealtime);
     socket.on('settings:payment-gateway-updated', handleGatewayRealtime);
+    socket.on('settings:contact-updated', handleContactRealtime);
 
     return () => {
       socket.off('connect', onConnect);
@@ -438,6 +461,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
       socket.off('whatsapp:status', handleWhatsAppRealtime);
       socket.off('settings:bill-design-updated', handleBillDesignRealtime);
       socket.off('settings:payment-gateway-updated', handleGatewayRealtime);
+      socket.off('settings:contact-updated', handleContactRealtime);
     };
   }, [token]);
 
@@ -537,6 +561,8 @@ export default function AdminPortalPage({ onNavigateHome }) {
     localStorage.removeItem('sachikheti_admin_token');
     setToken('');
     setAdminUser(null);
+    setUsername('');
+    setPassword('');
   };
 
   // ==========================================
@@ -1672,6 +1698,33 @@ export default function AdminPortalPage({ onNavigateHome }) {
     }
   };
 
+  const handleSaveContact = async (e) => {
+    if (e) e.preventDefault();
+    setSavingContact(true);
+    try {
+      const res = await fetch('/api/settings/contact', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(storeContact)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStoreContact(data.data);
+        setActionSuccess('✓ Store Contact & Social Media links updated successfully across the entire website and footer!');
+        setTimeout(() => setActionSuccess(''), 5000);
+      } else {
+        alert(data.message || 'Failed to save store contact settings');
+      }
+    } catch (err) {
+      alert('Error saving contact settings: ' + err.message);
+    } finally {
+      setSavingContact(false);
+    }
+  };
+
   // ==========================================
   // ORDER STATUS UPDATE HANDLER
   // ==========================================
@@ -2249,16 +2302,17 @@ export default function AdminPortalPage({ onNavigateHome }) {
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="admin-login-form">
+          <form onSubmit={handleLogin} className="admin-login-form" autoComplete="off">
             <div className="form-group">
               <label className="form-label">Username</label>
               <input
                 type="text"
                 required
+                name="admin_username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="form-input"
-                autoComplete="username"
+                autoComplete="off"
                 placeholder="Enter admin username"
               />
             </div>
@@ -2269,10 +2323,11 @@ export default function AdminPortalPage({ onNavigateHome }) {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
+                  name="admin_password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="form-input"
-                  autoComplete="current-password"
+                  autoComplete="new-password"
                   placeholder="Enter password"
                   style={{ paddingRight: '44px' }}
                 />
@@ -5110,6 +5165,16 @@ export default function AdminPortalPage({ onNavigateHome }) {
                     </span>
                   )}
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSettingsSubTab('contact')}
+                  className={`btn btn-sm ${settingsSubTab === 'contact' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '0.86rem' }}
+                >
+                  <Phone size={16} />
+                  <span>Contact & Social Links</span>
+                </button>
               </div>
 
               {/* SUB-TAB 1: ANNOUNCEMENT RIBBON */}
@@ -6112,6 +6177,252 @@ export default function AdminPortalPage({ onNavigateHome }) {
                       </button>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* SUB-TAB 5: STORE CONTACT & SOCIAL MEDIA */}
+              {settingsSubTab === 'contact' && (
+                <div style={{ maxWidth: '850px' }}>
+                  <div
+                    style={{
+                      background: '#FFFFFF',
+                      borderRadius: '16px',
+                      border: '1px solid #E5E7EB',
+                      padding: '24px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                      marginBottom: '20px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                      <div
+                        style={{
+                          width: '42px',
+                          height: '42px',
+                          borderRadius: '10px',
+                          background: '#E8F5E9',
+                          color: '#15733E',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Phone size={22} />
+                      </div>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#1B2E23' }}>
+                          Store Contact & Official Social Media Links
+                        </h3>
+                        <div style={{ fontSize: '0.82rem', color: '#6B7280', marginTop: '2px' }}>
+                          Manage the live phone number, WhatsApp hotline, official address, and Facebook & Instagram URLs shown across the entire platform and footer.
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Live Preview Box of Footer Links */}
+                    <div
+                      style={{
+                        background: '#0B291B',
+                        borderRadius: '12px',
+                        padding: '16px 20px',
+                        marginBottom: '24px',
+                        color: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '12px',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#86EFAC', fontWeight: 700 }}>
+                          Live Footer Preview
+                        </div>
+                        <div style={{ fontSize: '0.95rem', fontWeight: 700, marginTop: '2px', color: '#F3F4F6' }}>
+                          📞 {storeContact.displayPhone || storeContact.phone} • ✉️ {storeContact.email}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <a
+                          href={storeContact.facebookUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            background: '#1877F2',
+                            color: '#FFFFFF',
+                            padding: '6px 14px',
+                            borderRadius: '8px',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                            textDecoration: 'none',
+                          }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="#FFFFFF">
+                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                          </svg>
+                          <span>Facebook</span>
+                        </a>
+
+                        <a
+                          href={storeContact.instagramUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
+                            color: '#FFFFFF',
+                            padding: '6px 14px',
+                            borderRadius: '8px',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                            textDecoration: 'none',
+                          }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                          </svg>
+                          <span>Instagram</span>
+                        </a>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleSaveContact}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontWeight: 700, fontSize: '0.86rem' }}>
+                            Primary Contact Phone (Digits only)
+                          </label>
+                          <input
+                            type="text"
+                            value={storeContact.phone || ''}
+                            onChange={(e) => setStoreContact({ ...storeContact, phone: e.target.value })}
+                            className="form-input"
+                            placeholder="8360253372"
+                            required
+                          />
+                          <span style={{ fontSize: '0.74rem', color: '#6B7280' }}>
+                            Used for direct calls and tel: links across the store.
+                          </span>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontWeight: 700, fontSize: '0.86rem' }}>
+                            Display Phone (Formatted for Humans)
+                          </label>
+                          <input
+                            type="text"
+                            value={storeContact.displayPhone || ''}
+                            onChange={(e) => setStoreContact({ ...storeContact, displayPhone: e.target.value })}
+                            className="form-input"
+                            placeholder="+91 8360253372"
+                          />
+                          <span style={{ fontSize: '0.74rem', color: '#6B7280' }}>
+                            Shown in the website footer and contact header.
+                          </span>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontWeight: 700, fontSize: '0.86rem' }}>
+                            WhatsApp Hotline Number
+                          </label>
+                          <input
+                            type="text"
+                            value={storeContact.whatsappNumber || ''}
+                            onChange={(e) => setStoreContact({ ...storeContact, whatsappNumber: e.target.value })}
+                            className="form-input"
+                            placeholder="8360253372"
+                            required
+                          />
+                          <span style={{ fontSize: '0.74rem', color: '#6B7280' }}>
+                            Customers are redirected here on WhatsApp orders.
+                          </span>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontWeight: 700, fontSize: '0.86rem' }}>
+                            Official Email Address
+                          </label>
+                          <input
+                            type="email"
+                            value={storeContact.email || ''}
+                            onChange={(e) => setStoreContact({ ...storeContact, email: e.target.value })}
+                            className="form-input"
+                            placeholder="codeverse114@gmail.com"
+                          />
+                          <span style={{ fontSize: '0.74rem', color: '#6B7280' }}>
+                            Official customer support and inquiry inbox.
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: '20px' }}>
+                        <label className="form-label" style={{ fontWeight: 700, fontSize: '0.86rem' }}>
+                          Registered Office / Storefront Address
+                        </label>
+                        <input
+                          type="text"
+                          value={storeContact.address || ''}
+                          onChange={(e) => setStoreContact({ ...storeContact, address: e.target.value })}
+                          className="form-input"
+                          placeholder="1st Floor, Aggerwal Colony, Fatehabad, Haryana, India - 125050"
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontWeight: 700, fontSize: '0.86rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="#1877F2">
+                              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                            </svg>
+                            Facebook Page Link
+                          </label>
+                          <input
+                            type="url"
+                            value={storeContact.facebookUrl || ''}
+                            onChange={(e) => setStoreContact({ ...storeContact, facebookUrl: e.target.value })}
+                            className="form-input"
+                            placeholder="https://www.facebook.com/share/..."
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontWeight: 700, fontSize: '0.86rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E1306C" strokeWidth="2">
+                              <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                              <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                              <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                            </svg>
+                            Instagram Profile Link
+                          </label>
+                          <input
+                            type="url"
+                            value={storeContact.instagramUrl || ''}
+                            onChange={(e) => setStoreContact({ ...storeContact, instagramUrl: e.target.value })}
+                            className="form-input"
+                            placeholder="https://www.instagram.com/sachi_kheti?..."
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                        <button
+                          type="submit"
+                          disabled={savingContact}
+                          className="btn btn-primary"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 24px' }}
+                        >
+                          {savingContact ? <RefreshCw size={16} className="spin" /> : <CheckCircle size={16} />}
+                          <span>Save Contact & Social Details</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
                 </div>
               )}
             </div>

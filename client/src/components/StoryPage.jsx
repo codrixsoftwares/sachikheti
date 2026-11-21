@@ -8,7 +8,7 @@ export default function StoryPage({ onExploreClick }) {
 
   const openDirectWhatsApp = () => {
     const text = encodeURIComponent("Hello SachiKheti (LFPC) Team! I read your inspiring story and would like to order pure farm produce.");
-    window.open(`https://wa.me/918295886832?text=${text}`, '_blank');
+    window.open(`https://wa.me/918360253372?text=${text}`, '_blank');
   };
 
   return (

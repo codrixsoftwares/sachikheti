@@ -33,7 +33,7 @@ The design system incorporates the brand identity extracted directly from the of
 
 1. **1-Click WhatsApp Assisted Checkout:**
    * Customer fills address and clicks **Send Order to WhatsApp**.
-   * Automatically formats ordered items, quantities, SKU names, address, and total into a message sent directly to LFPC (+91-8295886832).
+   * Automatically formats ordered items, quantities, SKU names, address, and total into a message sent directly to LFPC (+91-8360253372).
 2. **Prepaid Online Payment via Razorpay:**
    * Integrates cards, UPI, and NetBanking.
    * Cryptographic server-side payment signature verification.

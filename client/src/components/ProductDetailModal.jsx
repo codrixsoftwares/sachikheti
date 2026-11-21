@@ -27,7 +27,7 @@ export default function ProductDetailModal({ product, onClose }) {
     const msg = encodeURIComponent(
       `Hello SachiKheti (LFPC) Team!\nI would like to order:\n- *${product.title}* (${product.titlePunjabi})\n- Quantity: ${quantity} x ${product.unit}\n- Estimated Price: ₹${total.toLocaleString('en-IN')}\n\nPlease let me know the delivery timeframe to my address.`
     );
-    window.open(`https://wa.me/918295886832?text=${msg}`, '_blank');
+    window.open(`https://wa.me/918360253372?text=${msg}`, '_blank');
   };
 
   return (
