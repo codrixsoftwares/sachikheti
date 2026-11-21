@@ -16,6 +16,7 @@ import {
   Filter,
   ExternalLink,
   ArrowLeft,
+  ArrowRight,
   RefreshCw,
   Eye,
   Check,
@@ -134,6 +135,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const [billingSearch, setBillingSearch] = useState('');
   const [billingCategoryFilter, setBillingCategoryFilter] = useState('all');
   const [billingListingFilter, setBillingListingFilter] = useState('all'); // 'all', 'sale', 'rent', 'featured'
+  const [posMobileTab, setPosMobileTab] = useState('catalog'); // 'catalog' | 'bill'
   const [billingBillType, setBillingBillType] = useState('auto'); // 'auto', 'direct_sale', 'rental', 'combined'
   const [billingRentalDetails, setBillingRentalDetails] = useState({
     tenure: '1 Acre',
@@ -3159,17 +3161,37 @@ export default function AdminPortalPage({ onNavigateHome }) {
           {/* ==================================================== */}
           {(activeTab === 'customer-store' || activeTab === 'billing') && (
             <div className="admin-tab-view pos-terminal-tab-view">
+              {/* Mobile View Segmented Switcher (<= 1024px) */}
+              <div className="pos-mobile-segmented-switch">
+                <button
+                  type="button"
+                  onClick={() => setPosMobileTab('catalog')}
+                  className={`pos-mobile-seg-btn ${posMobileTab === 'catalog' ? 'active' : ''}`}
+                >
+                  <Package size={15} />
+                  <span>1. Products Catalog ({products.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPosMobileTab('bill')}
+                  className={`pos-mobile-seg-btn ${posMobileTab === 'bill' ? 'active' : ''}`}
+                >
+                  <Receipt size={15} />
+                  <span>2. Live Virtual Bill ({billingCart.reduce((sum, it) => sum + it.quantity, 0)})</span>
+                  <span className="pos-mobile-seg-badge">
+                    ₹{billingGrandTotal.toLocaleString('en-IN')}
+                  </span>
+                </button>
+              </div>
+
               {/* Responsive 2-Column Split: Customer Store Catalogs (Left) + Live Virtual Bill (Right) */}
               <div
                 className="pos-split-container"
               >
                 {/* LEFT: Customer Store Catalog Browser (Independently Scrollable) */}
                 <div
-                  className="pos-catalog-scroll"
+                  className={`pos-catalog-scroll ${posMobileTab !== 'catalog' ? 'mobile-hidden' : ''}`}
                   style={{
-                    height: '100%',
-                    overflowY: 'auto',
-                    paddingRight: '8px',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '14px',
@@ -3331,20 +3353,38 @@ export default function AdminPortalPage({ onNavigateHome }) {
                         );
                       })}
                   </div>
+
+                  {/* Mobile Floating Action Indicator to open Bill when items are added */}
+                  {billingCart.length > 0 && (
+                    <div className="pos-mobile-bill-floating-indicator">
+                      <button
+                        type="button"
+                        onClick={() => setPosMobileTab('bill')}
+                        className="pos-mobile-floating-pill-btn"
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Receipt size={18} />
+                          <span>View Live Bill ({billingCart.reduce((s, i) => s + i.quantity, 0)} Items)</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '1rem', fontWeight: 900 }}>₹{billingGrandTotal.toLocaleString('en-IN')}</span>
+                          <ArrowRight size={18} />
+                        </div>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* RIGHT: Live Virtual Bill & Customized POS Slip (Stationary & Fixed to Viewport) */}
                 <div
-                  className="pos-bill-fixed"
+                  className={`pos-bill-fixed ${posMobileTab !== 'bill' ? 'mobile-hidden' : ''}`}
                   style={{
-                    height: '100%',
                     background: '#FFFFFF',
                     borderRadius: '14px',
                     border: `2px solid ${billDesign.accentColor}`,
                     boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
                     display: 'flex',
                     flexDirection: 'column',
-                    overflow: 'hidden',
                   }}
                 >
                   {/* TIER 1: Pinned Fixed Header (Store Branding & Title) */}
@@ -3416,6 +3456,98 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           ₹{billingSubtotal.toLocaleString('en-IN')}
                         </span>
                       </div>
+                    </div>
+
+                    {/* TIER 1.5: Pinned Quick Action & Grand Total Bar (Visible at top on all screens) */}
+                    <div className="pos-bill-top-actions">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '0.94rem', fontWeight: 800, color: '#1F2937' }}>Grand Total:</span>
+                        <span style={{ fontSize: '1.35rem', fontWeight: 900, color: billDesign.accentColor }}>
+                          ₹{billingGrandTotal.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+
+                      {/* Quick Print & WhatsApp Action Buttons */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={handleDirectPrintVirtualBill}
+                          disabled={billingCart.length === 0}
+                          className="btn btn-secondary"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            padding: '8px 10px',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                          }}
+                        >
+                          <Printer size={14} />
+                          <span>Print Preview</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleDirectWhatsAppVirtualBill}
+                          disabled={billingCart.length === 0 || sendingBillPdf}
+                          className="btn btn-secondary"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            padding: '8px 10px',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                            color: '#15803D',
+                            borderColor: '#BBF7D0',
+                            background: '#F0FDF4',
+                          }}
+                        >
+                          {sendingBillPdf ? <RefreshCw size={14} className="spin" /> : <Send size={14} />}
+                          <span>
+                            {sendingBillPdf
+                              ? 'Sending PDF...'
+                              : whatsappStatus?.status === 'CONNECTED'
+                                ? 'WhatsApp PDF'
+                                : 'Send WhatsApp'}
+                          </span>
+                        </button>
+                      </div>
+
+                      {/* Primary Save & Finalize Order Button */}
+                      <button
+                        type="button"
+                        onClick={handleCreateBill}
+                        disabled={generatingBill || billingCart.length === 0}
+                        className="btn btn-primary"
+                        style={{
+                          width: '100%',
+                          padding: '11px',
+                          fontSize: '0.92rem',
+                          fontWeight: 800,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          background: billDesign.accentColor,
+                          borderColor: billDesign.accentColor,
+                        }}
+                      >
+                        {generatingBill ? (
+                          <>
+                            <RefreshCw size={16} className="spin" />
+                            <span>Recording Official Invoice...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Receipt size={16} />
+                            <span>Save & Finalize Bill (₹{billingGrandTotal.toLocaleString('en-IN')})</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
 
