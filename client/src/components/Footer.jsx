@@ -7,8 +7,8 @@ export default function Footer({ onNavigate, onSelectCategory }) {
     phone: '8360253372',
     displayPhone: '+91 8360253372',
     whatsappNumber: '8360253372',
-    email: 'codeverse114@gmail.com',
-    address: '1st Floor, Aggerwal Colony, Fatehabad, Haryana, India - 125050',
+    email: 'support@sachikheti.com',
+    address: 'VPO Kamalpura, Near Kalgidhar Stadium Jagraon, Kamalpura, Ludhiana - 142030, Punjab',
     facebookUrl: 'https://www.facebook.com/share/1XymBg6n78/?mibextid=wwXIfr',
     instagramUrl: 'https://www.instagram.com/sachi_kheti?evlk=MWJuaXc1MGk4NGo3aw%3D%3D&utm_source=qr',
   });
@@ -199,7 +199,7 @@ export default function Footer({ onNavigate, onSelectCategory }) {
             <div className="footer-contact-list">
               <div className="footer-contact-item">
                 <MapPin size={18} color="#FBBF24" className="footer-contact-icon" />
-                <span>{contact.address || '1st Floor, Aggerwal Colony, Fatehabad, Haryana, India - 125050'}</span>
+                <span>{contact.address || 'VPO Kamalpura, Near Kalgidhar Stadium Jagraon, Kamalpura, Ludhiana - 142030, Punjab'}</span>
               </div>
               <div className="footer-contact-item">
                 <Phone size={18} color="#FBBF24" className="footer-contact-icon" />

@@ -9,10 +9,14 @@ const __dirname = path.dirname(__filename);
 const SETTINGS_FILE = path.join(__dirname, '../../data/store-settings.json');
 
 const defaultBillDesign = {
-  companyName: 'ਸੱਚੀ ਖੇਤੀ | SachiKheti (LFPC Ltd.)',
+  companyName: 'LAMMA FARMER PRODUCER COMPANY LIMITED',
+  brandName: 'ਸੱਚੀ ਖੇਤੀ | SachiKheti (LFPC Ltd.)',
   tagline: 'Direct Farmer Prosperity • Certified Natural Produce & Farm Machinery',
-  gstin: 'FSSAI: 20822005001234 | GSTIN: 06AABCL1234E1Z5',
-  address: 'VPO Bhirdana, District Fatehabad, Haryana - 125050',
+  cin: 'U01611PB2025PTC066073',
+  pan: 'AAGCL5404L',
+  tan: 'JLDL01772B',
+  gstin: '03AAGCL5404L1Z5',
+  address: 'VPO Kamalpura, Near Kalgidhar Stadium Jagraon, Kamalpura, Ludhiana - 142030, Punjab',
   phone: '+91 8360253372',
   email: 'support@sachikheti.com',
   billTitle: 'TAX INVOICE / CASH MEMO',
@@ -21,7 +25,7 @@ const defaultBillDesign = {
   showLogo: true,
   showSignature: true,
   termsNotes: '1. Certified direct farm produce & agricultural machinery custom hiring.\n2. Goods once delivered are verified fresh.\n3. Thank you for supporting indigenous farmers!',
-  authorizedSignatoryTitle: 'Authorized Store Manager (LFPC Ltd.)',
+  authorizedSignatoryTitle: 'Authorized Signatory (Lamma Farmer Producer Company Limited)',
 
   // Rental & Custom Hiring Configuration
   rentalBillTitle: 'AGRICULTURAL MACHINERY CUSTOM HIRING & RENTAL AGREEMENT',
@@ -44,8 +48,8 @@ export const defaultStoreContact = {
   phone: '8360253372',
   displayPhone: '+91 8360253372',
   whatsappNumber: '8360253372',
-  email: 'codeverse114@gmail.com',
-  address: '1st Floor, Aggerwal Colony, Fatehabad, Haryana, India - 125050',
+  email: 'support@sachikheti.com',
+  address: 'VPO Kamalpura, Near Kalgidhar Stadium Jagraon, Kamalpura, Ludhiana - 142030, Punjab',
   facebookUrl: 'https://www.facebook.com/share/1XymBg6n78/?mibextid=wwXIfr',
   instagramUrl: 'https://www.instagram.com/sachi_kheti?evlk=MWJuaXc1MGk4NGo3aw%3D%3D&utm_source=qr',
 };

@@ -1,0 +1,37 @@
+{
+  "billDesign": {
+    "companyName": "LAMMA FARMER PRODUCER COMPANY LIMITED",
+    "brandName": "ਸੱਚੀ ਖੇਤੀ | SachiKheti (LFPC Ltd.)",
+    "tagline": "Direct Farmer Prosperity • Certified Natural Produce & Farm Machinery",
+    "cin": "U01611PB2025PTC066073",
+    "pan": "AAGCL5404L",
+    "tan": "JLDL01772B",
+    "gstin": "03AAGCL5404L1Z5",
+    "address": "VPO Kamalpura, Near Kalgidhar Stadium Jagraon, Kamalpura, Ludhiana - 142030, Punjab",
+    "phone": "+91 8360253372",
+    "email": "support@sachikheti.com",
+    "billTitle": "TAX INVOICE / CASH MEMO",
+    "accentColor": "#15733E",
+    "themeName": "forest",
+    "showLogo": true,
+    "showSignature": true,
+    "termsNotes": "1. Certified direct farm produce & agricultural machinery custom hiring.\n2. Goods once delivered are verified fresh.\n3. Thank you for supporting indigenous farmers!",
+    "authorizedSignatoryTitle": "Authorized Signatory (Lamma Farmer Producer Company Limited)",
+    "rentalBillTitle": "AGRICULTURAL MACHINERY CUSTOM HIRING & RENTAL AGREEMENT",
+    "defaultRentalTenure": "1 Acre",
+    "defaultPenaltyPerHour": 250,
+    "defaultPenaltyPerAcre": 500,
+    "defaultGracePeriod": "1 Hour",
+    "defaultSecurityDeposit": 0,
+    "rentalTermsNotes": "1. Machinery is delivered in verified operational condition.\n2. Overdue usage beyond tenure incurs penalty at agreed rates.\n3. Fuel/Diesel & routine operational care is the responsibility of the hirer unless specified.\n4. Hirer is responsible for accidental damage caused by negligence."
+  },
+  "contact": {
+    "phone": "8360253372",
+    "displayPhone": "+91 8360253372",
+    "whatsappNumber": "8360253372",
+    "email": "support@sachikheti.com",
+    "address": "VPO Kamalpura, Near Kalgidhar Stadium Jagraon, Kamalpura, Ludhiana - 142030, Punjab",
+    "facebookUrl": "https://www.facebook.com/share/1XymBg6n78/?mibextid=wwXIfr",
+    "instagramUrl": "https://www.instagram.com/sachi_kheti?evlk=MWJuaXc1MGk4NGo3aw%3D%3D&utm_source=qr"
+  }
+}

@@ -67,17 +67,34 @@ export function generateInvoicePDF(billData, billDesign = {}) {
       }
 
       const textStartX = margin + 64;
-      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(16)
-        .text('SACHI KHETI (LFPC LTD.)', textStartX, topY);
+      const companyHeader = billDesign.companyName || 'LAMMA FARMER PRODUCER COMPANY LIMITED';
+      doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(13)
+        .text(companyHeader.toUpperCase(), textStartX, topY, { width: contentWidth - 210 });
 
-      doc.fillColor(grayColor).font('Helvetica').fontSize(8.5)
-        .text(billDesign.tagline || 'Direct Farmer Prosperity • Certified Natural Produce & Farm Machinery', textStartX, topY + 20)
-        .text(billDesign.address || 'VPO Bhirdana, District Fatehabad, Haryana - 125050', textStartX, topY + 31)
-        .text(`Phone: ${billDesign.phone || '+91 8360253372'} | Email: ${billDesign.email || 'support@sachikheti.com'}`, textStartX, topY + 42);
-
-      // FSSAI / GSTIN on right top
       doc.fillColor(grayColor).font('Helvetica').fontSize(8)
-        .text(billDesign.gstin || 'FSSAI: 20822005001234', margin, topY + 12, { align: 'right', width: contentWidth });
+        .text(billDesign.tagline || 'Direct Farmer Prosperity • Certified Natural Produce & Farm Machinery', textStartX, topY + 18, { width: contentWidth - 210 })
+        .text(billDesign.address || 'VPO Kamalpura, Near Kalgidhar Stadium Jagraon, Kamalpura, Ludhiana - 142030, Punjab', textStartX, topY + 28, { width: contentWidth - 210 })
+        .text(`Phone: ${billDesign.phone || '+91 8360253372'} | Email: ${billDesign.email || 'support@sachikheti.com'}`, textStartX, topY + 38, { width: contentWidth - 210 });
+
+      // Corporate & Tax identifiers on right top
+      let idLines = [];
+      if (billDesign.cin) idLines.push(`CIN: ${billDesign.cin}`);
+      if (billDesign.pan || billDesign.tan) {
+        idLines.push(`PAN: ${billDesign.pan || 'AAGCL5404L'}${billDesign.tan ? ` | TAN: ${billDesign.tan}` : ''}`);
+      }
+      if (billDesign.gstin) {
+        idLines.push(billDesign.gstin.startsWith('GSTIN:') || billDesign.gstin.startsWith('FSSAI:') ? billDesign.gstin : `GSTIN: ${billDesign.gstin}`);
+      }
+      if (idLines.length === 0) {
+        idLines = [
+          'CIN: U01611PB2025PTC066073',
+          'PAN: AAGCL5404L | TAN: JLDL01772B',
+          'GSTIN: 03AAGCL5404L1Z5'
+        ];
+      }
+
+      doc.fillColor(grayColor).font('Helvetica').fontSize(7.5)
+        .text(idLines.join('\n'), margin, topY + 4, { align: 'right', width: contentWidth });
 
       // Accent colored line divider
       topY += 62;

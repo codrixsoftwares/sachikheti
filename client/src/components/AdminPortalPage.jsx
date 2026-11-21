@@ -187,10 +187,14 @@ export default function AdminPortalPage({ onNavigateHome }) {
 
   // Customized Bill Design state
   const [billDesign, setBillDesign] = useState({
-    companyName: 'ਸੱਚੀ ਖੇਤੀ | SachiKheti (LFPC Ltd.)',
+    companyName: 'LAMMA FARMER PRODUCER COMPANY LIMITED',
+    brandName: 'ਸੱਚੀ ਖੇਤੀ | SachiKheti (LFPC Ltd.)',
     tagline: 'Direct Farmer Prosperity • Certified Natural Produce & Farm Machinery',
-    gstin: 'FSSAI: 20822005001234 | GSTIN: 06AABCL1234E1Z5',
-    address: 'VPO Bhirdana, District Fatehabad, Haryana - 125050',
+    cin: 'U01611PB2025PTC066073',
+    pan: 'AAGCL5404L',
+    tan: 'JLDL01772B',
+    gstin: '03AAGCL5404L1Z5',
+    address: 'VPO Kamalpura, Near Kalgidhar Stadium Jagraon, Kamalpura, Ludhiana - 142030, Punjab',
     phone: '+91 8360253372',
     email: 'support@sachikheti.com',
     billTitle: 'TAX INVOICE / CASH MEMO',
@@ -206,7 +210,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
     showLogo: true,
     showSignature: true,
     termsNotes: '1. Certified direct farm produce & agricultural machinery custom hiring.\n2. Goods once delivered are verified fresh.\n3. Thank you for supporting indigenous farmers!',
-    authorizedSignatoryTitle: 'Authorized Store Manager (LFPC Ltd.)'
+    authorizedSignatoryTitle: 'Authorized Signatory (Lamma Farmer Producer Company Limited)'
   });
   const [savingBillDesign, setSavingBillDesign] = useState(false);
 
@@ -3364,7 +3368,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                               style={{ width: '26px', height: '26px', borderRadius: '50%', objectFit: 'cover', background: '#FFFFFF' }}
                             />
                           )}
-                          <span style={{ fontWeight: 900, fontSize: '0.94rem', letterSpacing: '0.3px' }}>
+                          <span style={{ fontWeight: 900, fontSize: '0.94rem', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
                             {billDesign.companyName}
                           </span>
                         </div>
@@ -3372,12 +3376,21 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           Live Virtual Bill
                         </span>
                       </div>
+                      {billDesign.brandName && (
+                        <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#D1FAE5' }}>
+                          {billDesign.brandName}
+                        </div>
+                      )}
                       <div style={{ fontSize: '0.7rem', opacity: 0.9 }}>
                         {billDesign.tagline}
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', opacity: 0.85, marginTop: '2px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', opacity: 0.85, marginTop: '2px', flexWrap: 'wrap', gap: '4px' }}>
                         <span>📍 {billDesign.address}</span>
                         <span>📞 {billDesign.phone}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', fontSize: '0.64rem', opacity: 0.9, marginTop: '2px', flexWrap: 'wrap' }}>
+                        {billDesign.cin && <span>CIN: <strong>{billDesign.cin}</strong></span>}
+                        {billDesign.gstin && <span>GSTIN: <strong>{billDesign.gstin}</strong></span>}
                       </div>
                     </div>
 
@@ -6230,30 +6243,148 @@ export default function AdminPortalPage({ onNavigateHome }) {
 
                     <form onSubmit={handleSaveBillDesign} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                       <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.8rem' }}>Company / Store Name (English & Punjabi)</label>
+                        <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700 }}>
+                          Company Legal Name (as per RoC Certificate of Incorporation) *
+                        </label>
                         <input
                           type="text"
                           required
                           value={billDesign.companyName}
                           onChange={(e) => setBillDesign({ ...billDesign, companyName: e.target.value })}
                           className="form-input"
-                          style={{ margin: 0 }}
-                          placeholder="e.g. ਸੱਚੀ ਖੇਤੀ | SachiKheti (LFPC Ltd.)"
+                          style={{ margin: 0, fontWeight: 700 }}
+                          placeholder="e.g. LAMMA FARMER PRODUCER COMPANY LIMITED"
                         />
                       </div>
 
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.8rem' }}>Tagline / Organization Subtitle</label>
-                        <input
-                          type="text"
-                          value={billDesign.tagline}
-                          onChange={(e) => setBillDesign({ ...billDesign, tagline: e.target.value })}
-                          className="form-input"
-                          style={{ margin: 0 }}
-                          placeholder="e.g. Direct Farmer Prosperity • Certified Natural Produce & Farm Machinery"
-                        />
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div className="form-group" style={{ margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Brand & Trade Name (English & Punjabi)</label>
+                          <input
+                            type="text"
+                            value={billDesign.brandName || ''}
+                            onChange={(e) => setBillDesign({ ...billDesign, brandName: e.target.value })}
+                            className="form-input"
+                            style={{ margin: 0 }}
+                            placeholder="e.g. ਸੱਚੀ ਖੇਤੀ | SachiKheti (LFPC Ltd.)"
+                          />
+                        </div>
+
+                        <div className="form-group" style={{ margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Tagline / Organization Subtitle</label>
+                          <input
+                            type="text"
+                            value={billDesign.tagline}
+                            onChange={(e) => setBillDesign({ ...billDesign, tagline: e.target.value })}
+                            className="form-input"
+                            style={{ margin: 0 }}
+                            placeholder="e.g. Direct Farmer Prosperity • Certified Natural Produce & Farm Machinery"
+                          />
+                        </div>
                       </div>
 
+                      {/* Official Corporate Identifiers: CIN, PAN, TAN */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '10px' }}>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700, color: '#15733E' }}>
+                            Corporate Identity No. (CIN) *
+                          </label>
+                          <input
+                            type="text"
+                            value={billDesign.cin || ''}
+                            onChange={(e) => setBillDesign({ ...billDesign, cin: e.target.value.toUpperCase() })}
+                            className="form-input font-mono"
+                            style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.3px' }}
+                            placeholder="e.g. U01611PB2025PTC066073"
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700, color: '#15733E' }}>
+                            Permanent Account No. (PAN) *
+                          </label>
+                          <input
+                            type="text"
+                            value={billDesign.pan || ''}
+                            onChange={(e) => setBillDesign({ ...billDesign, pan: e.target.value.toUpperCase() })}
+                            className="form-input font-mono"
+                            style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.5px' }}
+                            placeholder="e.g. AAGCL5404L"
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700, color: '#15733E' }}>
+                            Tax Deduction No. (TAN)
+                          </label>
+                          <input
+                            type="text"
+                            value={billDesign.tan || ''}
+                            onChange={(e) => setBillDesign({ ...billDesign, tan: e.target.value.toUpperCase() })}
+                            className="form-input font-mono"
+                            style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.5px' }}
+                            placeholder="e.g. JLDL01772B"
+                          />
+                        </div>
+                      </div>
+
+                      {/* GSTIN & Official Email */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#15733E' }}>
+                            GSTIN (Goods and Services Tax No.)
+                          </label>
+                          <input
+                            type="text"
+                            value={billDesign.gstin}
+                            onChange={(e) => setBillDesign({ ...billDesign, gstin: e.target.value.toUpperCase() })}
+                            className="form-input font-mono"
+                            style={{ margin: 0, fontWeight: 700 }}
+                            placeholder="e.g. 03AAGCL5404L1Z5"
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Official Support Email</label>
+                          <input
+                            type="email"
+                            value={billDesign.email || ''}
+                            onChange={(e) => setBillDesign({ ...billDesign, email: e.target.value })}
+                            className="form-input"
+                            style={{ margin: 0 }}
+                            placeholder="e.g. support@sachikheti.com"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Address & Official Phone */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '12px' }}>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700 }}>
+                            Registered Office & Mailing Address (RoC Record) *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={billDesign.address}
+                            onChange={(e) => setBillDesign({ ...billDesign, address: e.target.value })}
+                            className="form-input"
+                            style={{ margin: 0 }}
+                            placeholder="e.g. VPO Kamalpura, Near Kalgidhar Stadium Jagraon, Kamalpura, Ludhiana - 142030, Punjab"
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700 }}>Official Contact Phone *</label>
+                          <input
+                            type="text"
+                            required
+                            value={billDesign.phone}
+                            onChange={(e) => setBillDesign({ ...billDesign, phone: e.target.value })}
+                            className="form-input"
+                            style={{ margin: 0 }}
+                            placeholder="e.g. +91 8360253372"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Titles: Direct Sales Bill Title & Signatory Title */}
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                         <div>
                           <label className="form-label" style={{ fontSize: '0.8rem' }}>Invoice Header Title</label>
@@ -6268,39 +6399,14 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           />
                         </div>
                         <div>
-                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Tax / FSSAI / GSTIN Numbers</label>
+                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Authorized Signatory Title</label>
                           <input
                             type="text"
-                            value={billDesign.gstin}
-                            onChange={(e) => setBillDesign({ ...billDesign, gstin: e.target.value })}
+                            value={billDesign.authorizedSignatoryTitle || ''}
+                            onChange={(e) => setBillDesign({ ...billDesign, authorizedSignatoryTitle: e.target.value })}
                             className="form-input"
                             style={{ margin: 0 }}
-                            placeholder="e.g. FSSAI: 20822005001234 | GSTIN: ..."
-                          />
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
-                        <div>
-                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Store Address</label>
-                          <input
-                            type="text"
-                            value={billDesign.address}
-                            onChange={(e) => setBillDesign({ ...billDesign, address: e.target.value })}
-                            className="form-input"
-                            style={{ margin: 0 }}
-                            placeholder="e.g. VPO Bhirdana, Fatehabad, Haryana"
-                          />
-                        </div>
-                        <div>
-                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Official Contact Phone</label>
-                          <input
-                            type="text"
-                            value={billDesign.phone}
-                            onChange={(e) => setBillDesign({ ...billDesign, phone: e.target.value })}
-                            className="form-input"
-                            style={{ margin: 0 }}
-                            placeholder="e.g. +91 8360253372"
+                            placeholder="e.g. Authorized Signatory (Lamma Farmer Producer Company Limited)"
                           />
                         </div>
                       </div>
@@ -6490,26 +6596,35 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           <img
                             src="/assets/brand/sachi-kheti-emblem.jpg"
                             alt="Emblem"
-                            style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
+                            style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover' }}
                           />
                         )}
-                        <div>
-                          <div style={{ fontSize: '1rem', fontWeight: 900, color: billDesign.accentColor }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '0.96rem', fontWeight: 900, color: billDesign.accentColor, lineHeight: 1.2 }}>
                             {billDesign.companyName}
                           </div>
-                          <div style={{ fontSize: '0.72rem', color: '#4B5563', lineHeight: 1.2 }}>
+                          {billDesign.brandName && (
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#15803D', marginTop: '2px' }}>
+                              {billDesign.brandName}
+                            </div>
+                          )}
+                          <div style={{ fontSize: '0.72rem', color: '#4B5563', lineHeight: 1.2, marginTop: '2px' }}>
                             {billDesign.tagline}
                           </div>
                         </div>
                       </div>
-                      <div style={{ fontSize: '0.68rem', color: '#6B7280', marginTop: '6px' }}>
-                        📍 {billDesign.address} • 📞 {billDesign.phone}
+                      <div style={{ fontSize: '0.68rem', color: '#6B7280', marginTop: '8px' }}>
+                        📍 {billDesign.address}
                       </div>
-                      {billDesign.gstin && (
-                        <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginTop: '2px' }}>
-                          {billDesign.gstin}
-                        </div>
-                      )}
+                      <div style={{ fontSize: '0.68rem', color: '#6B7280', marginTop: '2px' }}>
+                        📞 {billDesign.phone} {billDesign.email && `• ✉ ${billDesign.email}`}
+                      </div>
+                      <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#1F2937', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {billDesign.cin && <span style={{ background: '#F0FDF4', padding: '1px 5px', borderRadius: '4px', border: '1px solid #DCFCE7' }}>CIN: <strong>{billDesign.cin}</strong></span>}
+                        {billDesign.pan && <span style={{ background: '#F0FDF4', padding: '1px 5px', borderRadius: '4px', border: '1px solid #DCFCE7' }}>PAN: <strong>{billDesign.pan}</strong></span>}
+                        {billDesign.tan && <span style={{ background: '#F0FDF4', padding: '1px 5px', borderRadius: '4px', border: '1px solid #DCFCE7' }}>TAN: <strong>{billDesign.tan}</strong></span>}
+                        {billDesign.gstin && <span style={{ background: '#F0FDF4', padding: '1px 5px', borderRadius: '4px', border: '1px solid #DCFCE7' }}>GSTIN: <strong>{billDesign.gstin}</strong></span>}
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', marginBottom: '10px' }}>
@@ -8119,20 +8234,29 @@ export default function AdminPortalPage({ onNavigateHome }) {
                     />
                   )}
                   <div>
-                    <h2 style={{ fontSize: '1.35rem', fontWeight: 900, color: billDesign.accentColor, margin: 0 }}>
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: 900, color: billDesign.accentColor, margin: 0, textTransform: 'uppercase' }}>
                       {billDesign.companyName}
                     </h2>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', marginTop: '2px' }}>
-                      {billDesign.tagline}
-                    </div>
-                    <div style={{ fontSize: '0.74rem', color: '#6B7280', marginTop: '2px' }}>
-                      📍 {billDesign.address} • 📞 {billDesign.phone}
-                    </div>
-                    {billDesign.gstin && (
-                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#374151', marginTop: '2px' }}>
-                        {billDesign.gstin}
+                    {billDesign.brandName && (
+                      <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#15803D', marginTop: '2px' }}>
+                        {billDesign.brandName}
                       </div>
                     )}
+                    <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151', marginTop: '2px' }}>
+                      {billDesign.tagline}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#6B7280', marginTop: '3px' }}>
+                      📍 {billDesign.address}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#6B7280', marginTop: '1px' }}>
+                      📞 {billDesign.phone} {billDesign.email && `• ✉ ${billDesign.email}`}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1F2937', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {billDesign.cin && <span style={{ background: '#F0FDF4', padding: '1px 6px', borderRadius: '4px', border: '1px solid #DCFCE7' }}>CIN: <strong>{billDesign.cin}</strong></span>}
+                      {billDesign.pan && <span style={{ background: '#F0FDF4', padding: '1px 6px', borderRadius: '4px', border: '1px solid #DCFCE7' }}>PAN: <strong>{billDesign.pan}</strong></span>}
+                      {billDesign.tan && <span style={{ background: '#F0FDF4', padding: '1px 6px', borderRadius: '4px', border: '1px solid #DCFCE7' }}>TAN: <strong>{billDesign.tan}</strong></span>}
+                      {billDesign.gstin && <span style={{ background: '#F0FDF4', padding: '1px 6px', borderRadius: '4px', border: '1px solid #DCFCE7' }}>GSTIN: <strong>{billDesign.gstin}</strong></span>}
+                    </div>
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
