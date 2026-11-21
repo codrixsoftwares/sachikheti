@@ -1655,8 +1655,6 @@ export default function AdminDashboard({ onClose }) {
                     }
                   />
                 </div>
-
-                </div>
               </div>
 
               {/* Sticky Action Footer */}
