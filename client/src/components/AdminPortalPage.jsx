@@ -55,7 +55,9 @@ import {
   AlertTriangle,
   Lock,
   EyeOff,
-  Key
+  Key,
+  LayoutDashboard,
+  LayoutGrid
 } from 'lucide-react';
 import {
   getSupabaseConfig,
@@ -160,6 +162,11 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const [historyViewMode, setHistoryViewMode] = useState('table'); // 'table', 'cards'
   const [historyActiveSheet, setHistoryActiveSheet] = useState('all'); // 'all', 'pos', 'rental', 'due', 'online'
   const [selectedHistoryRowId, setSelectedHistoryRowId] = useState(null);
+
+  // Products Catalog Excel & View State
+  const [productViewMode, setProductViewMode] = useState('table'); // 'table', 'cards'
+  const [productActiveSheet, setProductActiveSheet] = useState('all'); // 'all', 'produce', 'rental', 'out-of-stock'
+  const [selectedProductRowId, setSelectedProductRowId] = useState(null);
 
   const [customItemForm, setCustomItemForm] = useState({
     title: '',
@@ -386,7 +393,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
             osc.start();
             osc.stop(ctx.currentTime + 0.5);
           }
-        } catch (e) {}
+        } catch (e) { }
 
         setRealtimeAlert(`🔔 New Order Received: #${data.order.orderNumber} (₹${data.order.totalAmount}) from ${data.order.customerName}`);
         setTimeout(() => setRealtimeAlert(null), 8000);
@@ -806,6 +813,36 @@ export default function AdminPortalPage({ onNavigateHome }) {
       alert('Error updating stock and quantity');
     } finally {
       setSavingStockModal(false);
+    }
+  };
+
+  const handleQuickStockToggle = async (product, e) => {
+    if (e) e.stopPropagation();
+    const isCurrentlyInStock = Boolean(product.inStock && (product.stockCount > 0 || (product.stockCount === undefined && product.stockQuantity > 0)));
+    const nextInStock = !isCurrentlyInStock;
+    const nextQty = nextInStock ? (product.stockCount && product.stockCount > 0 ? product.stockCount : 50) : 0;
+    try {
+      const res = await fetch(`/api/products/${product.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          inStock: nextInStock,
+          stockCount: nextQty
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActionSuccess(`✓ "${product.title}" set to ${nextInStock ? `IN STOCK (${nextQty})` : 'OUT OF STOCK (0)'}`);
+        setTimeout(() => setActionSuccess(''), 3000);
+        loadAllData();
+      } else {
+        alert(data.message || 'Failed to update stock');
+      }
+    } catch (err) {
+      alert('Error updating product stock status');
     }
   };
 
@@ -1487,6 +1524,42 @@ export default function AdminPortalPage({ onNavigateHome }) {
     document.body.removeChild(link);
   };
 
+  const exportProductsToCSV = () => {
+    if (filteredProducts.length === 0) {
+      alert('No products match your current filter.');
+      return;
+    }
+    const headers = ['SKU ID', 'Product Title', 'Punjabi Title', 'Category', 'Listing Type', 'Price (INR)', 'Unit', 'Stock Status', 'Stock Quantity', 'Featured', 'Description'];
+    const rows = filteredProducts.map((p, idx) => {
+      const listingType = getProductListingType(p);
+      const typeLabel = listingType === 'both' ? 'Rent & Sale' : (listingType === 'rent' ? 'For Rent' : 'Direct Sale');
+      const isCurrentlyInStock = Boolean(p.inStock && (p.stockCount > 0 || (p.stockCount === undefined && p.stockQuantity > 0)));
+      const qty = p.stockCount !== undefined && p.stockCount !== null ? p.stockCount : (p.inStock ? 50 : 0);
+      return [
+        `"SKU-${String(idx + 1).padStart(3, '0')}"`,
+        `"${(p.title || '').replace(/"/g, '""')}"`,
+        `"${(p.titlePunjabi || '').replace(/"/g, '""')}"`,
+        `"${(p.category?.name || 'Produce').replace(/"/g, '""')}"`,
+        `"${typeLabel}"`,
+        p.price || 0,
+        `"${(p.unit || 'Kg').replace(/"/g, '""')}"`,
+        isCurrentlyInStock ? '"IN_STOCK"' : '"OUT_OF_STOCK"',
+        qty,
+        p.featured ? '"YES"' : '"NO"',
+        `"${(p.description || '').replace(/"/g, '""')}"`,
+      ].join(',');
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `SachiKheti_Products_Catalog_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // ==========================================
   // WHATSAPP BAILEYS CONNECTION HANDLERS (SINGLE-DEVICE LIFECYCLE)
   // ==========================================
@@ -1726,8 +1799,8 @@ export default function AdminPortalPage({ onNavigateHome }) {
     const itemsStr = Array.isArray(order.items)
       ? order.items.map(it => `${it.quantity || 1}x ${it.title}`).join(', ')
       : typeof order.items === 'string'
-      ? order.items
-      : '';
+        ? order.items
+        : '';
 
     setOrderForm({
       customerName: order.customerName,
@@ -1906,7 +1979,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
           }
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Only apply category/unit heuristic if specs were never explicitly set!
     if (!hasExplicitSpecs) {
@@ -1929,6 +2002,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const filteredProducts = products.filter(p => {
     const matchesSearch = !productSearch ||
       p.title.toLowerCase().includes(productSearch.toLowerCase()) ||
+      (p.titlePunjabi && p.titlePunjabi.toLowerCase().includes(productSearch.toLowerCase())) ||
       (p.description && p.description.toLowerCase().includes(productSearch.toLowerCase()));
     const matchesCat = selectedProductCategory === 'all' || p.categoryId === selectedProductCategory;
 
@@ -1942,7 +2016,16 @@ export default function AdminPortalPage({ onNavigateHome }) {
       matchesListing = listingType === 'sale' || listingType === 'both';
     }
 
-    return matchesSearch && matchesCat && matchesListing;
+    let matchesSheet = true;
+    if (productActiveSheet === 'produce') {
+      matchesSheet = listingType === 'sale' || listingType === 'both';
+    } else if (productActiveSheet === 'rental') {
+      matchesSheet = listingType === 'rent' || listingType === 'both';
+    } else if (productActiveSheet === 'out-of-stock') {
+      matchesSheet = !p.inStock || p.stockCount === 0 || p.stockQuantity === 0;
+    }
+
+    return matchesSearch && matchesCat && matchesListing && matchesSheet;
   });
 
   const getStatus = (o) => o.orderStatus || o.status || 'PENDING';
@@ -1968,7 +2051,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
       try {
         const its = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
         matchItem = (its || []).some((it) => (it.title || it.name || '').toLowerCase().includes(q));
-      } catch (e) {}
+      } catch (e) { }
       if (!matchNum && !matchCust && !matchPhone && !matchCity && !matchItem) return false;
     }
 
@@ -1990,7 +2073,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
             const t = (it.title || it.name || '').toLowerCase();
             return it.isRental || it.isForRent || u.includes('acre') || u.includes('hour') || t.includes('tractor');
           });
-        } catch (e) {}
+        } catch (e) { }
       }
       if (!hasRent) return false;
     }
@@ -2070,8 +2153,8 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const totalRevenue = serverMetrics?.totalRevenue !== undefined
     ? serverMetrics.totalRevenue
     : orders
-        .filter(o => getStatus(o) !== 'CANCELLED')
-        .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      .filter(o => getStatus(o) !== 'CANCELLED')
+      .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
   const pendingOrdersCount = serverMetrics?.pendingOrders !== undefined
     ? serverMetrics.pendingOrders
@@ -2153,34 +2236,34 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const categorySalesList = (serverMetrics?.categorySalesList && serverMetrics.categorySalesList.length > 0)
     ? serverMetrics.categorySalesList
     : (() => {
-        const categorySalesMap = {};
-        categories.forEach(c => {
-          categorySalesMap[c.id] = {
-            id: c.id,
-            name: c.name,
-            sales: 0,
-            units: 0,
-            productCount: c._count?.products || 0,
-          };
-        });
+      const categorySalesMap = {};
+      categories.forEach(c => {
+        categorySalesMap[c.id] = {
+          id: c.id,
+          name: c.name,
+          sales: 0,
+          units: 0,
+          productCount: c._count?.products || 0,
+        };
+      });
 
-        orders.forEach(o => {
-          if (getStatus(o) === 'CANCELLED') return;
-          try {
-            const items = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
-            (items || []).forEach(item => {
-              const prod = products.find(p => p.id === item.productId || p.title === item.title);
-              const catId = prod?.categoryId || (categories.length > 0 ? categories[0].id : null);
-              if (catId && categorySalesMap[catId]) {
-                categorySalesMap[catId].sales += (item.price || 0) * (item.quantity || 1);
-                categorySalesMap[catId].units += (item.quantity || 1);
-              }
-            });
-          } catch (e) {}
-        });
+      orders.forEach(o => {
+        if (getStatus(o) === 'CANCELLED') return;
+        try {
+          const items = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
+          (items || []).forEach(item => {
+            const prod = products.find(p => p.id === item.productId || p.title === item.title);
+            const catId = prod?.categoryId || (categories.length > 0 ? categories[0].id : null);
+            if (catId && categorySalesMap[catId]) {
+              categorySalesMap[catId].sales += (item.price || 0) * (item.quantity || 1);
+              categorySalesMap[catId].units += (item.quantity || 1);
+            }
+          });
+        } catch (e) { }
+      });
 
-        return Object.values(categorySalesMap);
-      })();
+      return Object.values(categorySalesMap);
+    })();
 
   const maxCategorySales = serverMetrics?.maxCategorySales || Math.max(...categorySalesList.map(c => c.sales), 1);
 
@@ -2188,14 +2271,14 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const whatsappRevenue = serverMetrics?.whatsappRevenue !== undefined
     ? serverMetrics.whatsappRevenue
     : orders
-        .filter(o => o.paymentMethod === 'WHATSAPP' && getStatus(o) !== 'CANCELLED')
-        .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      .filter(o => o.paymentMethod === 'WHATSAPP' && getStatus(o) !== 'CANCELLED')
+      .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
   const onlineRevenue = serverMetrics?.onlineRevenue !== undefined
     ? serverMetrics.onlineRevenue
     : orders
-        .filter(o => o.paymentMethod !== 'WHATSAPP' && getStatus(o) !== 'CANCELLED')
-        .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      .filter(o => o.paymentMethod !== 'WHATSAPP' && getStatus(o) !== 'CANCELLED')
+      .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
   const totalValidRevenue = (whatsappRevenue + onlineRevenue) || 1;
   const whatsappRatio = serverMetrics?.whatsappRatio !== undefined
@@ -2213,11 +2296,11 @@ export default function AdminPortalPage({ onNavigateHome }) {
   const timelinePoints = (serverMetrics?.timelinePoints && serverMetrics.timelinePoints.length > 0)
     ? serverMetrics.timelinePoints
     : orders.slice(0, 7).map((o) => ({
-        label: new Date(o.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
-        amount: o.totalAmount || 0,
-        orderNumber: o.orderNumber,
-        status: getStatus(o)
-      })).reverse();
+      label: new Date(o.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+      amount: o.totalAmount || 0,
+      orderNumber: o.orderNumber,
+      status: getStatus(o)
+    })).reverse();
 
 
   // ==========================================
@@ -2650,6 +2733,173 @@ export default function AdminPortalPage({ onNavigateHome }) {
 
         {/* Content View Area */}
         <main className={`admin-portal-content admin-portal-main ${(activeTab === 'customer-store' || activeTab === 'billing') ? 'pos-active-main' : ''}`}>
+          
+          {/* Mobile-Only In-Page Header (Rendered on Main Page <= 768px, Hidden on Desktop > 768px via CSS) */}
+          <div className="admin-mobile-page-header">
+            <div className="admin-mobile-page-header-top">
+              <div className="admin-mobile-page-title">
+                {activeTab === 'overview' && (
+                  <>
+                    <LayoutDashboard size={20} color="#15733E" />
+                    <span>Executive Overview</span>
+                    <span className="admin-mobile-page-badge">Live Platform</span>
+                  </>
+                )}
+                {(activeTab === 'customer-store' || activeTab === 'billing') && (
+                  <>
+                    <ShoppingCart size={20} color="#15733E" />
+                    <span>Customer Store & POS</span>
+                    <span className="admin-mobile-page-badge">{billingCart.length} In Bill</span>
+                  </>
+                )}
+                {activeTab === 'orders' && (
+                  <>
+                    <ShoppingBag size={20} color="#15733E" />
+                    <span>Customer Orders</span>
+                    <span className="admin-mobile-page-badge">{orders.length} Orders</span>
+                  </>
+                )}
+                {activeTab === 'history' && (
+                  <>
+                    <FileText size={20} color="#15733E" />
+                    <span>Past Orders & Bills</span>
+                    <span className="admin-mobile-page-badge">{orders.length} Records</span>
+                  </>
+                )}
+                {activeTab === 'products' && (
+                  <>
+                    <Package size={20} color="#15733E" />
+                    <span>Products Catalog</span>
+                    <span className="admin-mobile-page-badge">{products.length} SKUs</span>
+                  </>
+                )}
+                {activeTab === 'categories' && (
+                  <>
+                    <Layers size={20} color="#15733E" />
+                    <span>Categories Manager</span>
+                    <span className="admin-mobile-page-badge">{categories.length} Categories</span>
+                  </>
+                )}
+                {activeTab === 'settings' && (
+                  <>
+                    <Settings size={20} color="#15733E" />
+                    <span>System Settings</span>
+                    <span className="admin-mobile-page-badge">Config</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Mobile Contextual Actions Bar */}
+            <div className="admin-mobile-page-actions">
+              {(activeTab === 'customer-store' || activeTab === 'billing') && billingCart.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearBillingCart}
+                  className="btn btn-secondary btn-sm"
+                  style={{ color: '#DC2626', borderColor: '#FECACA', fontSize: '0.78rem' }}
+                >
+                  <Trash2 size={13} />
+                  <span>Clear Bill ({billingCart.length})</span>
+                </button>
+              )}
+
+              {activeTab === 'products' && (
+                <div style={{ display: 'flex', gap: '8px', width: '100%', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={openAddProductModal}
+                    className="btn btn-primary btn-sm"
+                    style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.82rem' }}
+                  >
+                    <Plus size={15} />
+                    <span>Add Product</span>
+                  </button>
+                  <div style={{ display: 'inline-flex', background: '#F3F4F6', borderRadius: '6px', padding: '2px', border: '1px solid #D1D5DB' }}>
+                    <button
+                      type="button"
+                      onClick={() => setProductViewMode('table')}
+                      style={{
+                        padding: '4px 8px',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        background: productViewMode === 'table' ? '#15733E' : 'transparent',
+                        color: productViewMode === 'table' ? '#FFFFFF' : '#4B5563',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                      title="Spreadsheet Table View"
+                    >
+                      <FileSpreadsheet size={13} />
+                      <span>Table</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setProductViewMode('cards')}
+                      style={{
+                        padding: '4px 8px',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        background: productViewMode === 'cards' ? '#15733E' : 'transparent',
+                        color: productViewMode === 'cards' ? '#FFFFFF' : '#4B5563',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                      title="Cards View"
+                    >
+                      <LayoutGrid size={13} />
+                      <span>Cards</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'categories' && (
+                <button
+                  type="button"
+                  onClick={openAddCategoryModal}
+                  className="btn btn-primary btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem' }}
+                >
+                  <Plus size={15} />
+                  <span>Add Category</span>
+                </button>
+              )}
+
+              {(activeTab === 'overview' || activeTab === 'orders') && (
+                <button
+                  type="button"
+                  onClick={loadAllData}
+                  className="btn btn-secondary btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}
+                >
+                  <RefreshCw size={13} className={loadingData ? 'spin' : ''} />
+                  <span>Refresh</span>
+                </button>
+              )}
+
+              {activeTab === 'history' && (
+                <button
+                  type="button"
+                  onClick={exportHistoryToCSV}
+                  className="btn btn-secondary btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}
+                >
+                  <Download size={13} />
+                  <span>Export CSV</span>
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* ==================================================== */}
           {/* TAB 1: OVERVIEW METRICS                              */}
           {/* ==================================================== */}
@@ -3605,348 +3855,772 @@ export default function AdminPortalPage({ onNavigateHome }) {
           )}
 
           {/* ==================================================== */}
-          {/* TAB 2: PRODUCTS CATALOG MANAGER                      */}
+          {/* TAB 2: PRODUCTS CATALOG MANAGER (EXCEL WORKBOOK)     */}
           {/* ==================================================== */}
           {activeTab === 'products' && (
-            <div className="admin-tab-view">
-              {/* Search, Filter & Quick Category Bar */}
-              <div
-                style={{
-                  background: '#FFFFFF',
-                  padding: '16px 20px',
-                  borderRadius: '14px',
-                  border: '1px solid #E5E7EB',
-                  marginBottom: '22px',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '14px',
-                }}
-              >
-                {/* Top Row: Search Input + Category Dropdown */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  {/* Search Input */}
-                  <div style={{ flex: '1 1 320px', position: 'relative' }}>
-                    <Search
-                      size={17}
-                      color="#7A8B80"
-                      style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Search products by title, Punjabi name, category, or description..."
-                      value={productSearch}
-                      onChange={(e) => setProductSearch(e.target.value)}
-                      className="form-input"
-                      style={{
-                        paddingLeft: '40px',
-                        paddingRight: productSearch ? '36px' : '14px',
-                        margin: 0,
-                        height: '42px',
-                        borderRadius: '8px',
-                        fontSize: '0.88rem',
-                        border: '1px solid #D1D5DB',
-                        background: '#FFFFFF',
-                        width: '100%',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                    {productSearch && (
+            <div className="admin-tab-view" style={{ padding: 0, maxWidth: '100%' }}>
+              <div className="admin-excel-workbook">
+                {/* 1. EXCEL WORKBOOK GREEN HEADER BAR */}
+                <div className="excel-top-header-bar">
+                  <div className="excel-top-title-lockup">
+                    <div className="excel-icon-box">X</div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span className="excel-title-text">SachiKheti_Products_Catalog_2026.xlsx</span>
+                        <span className="excel-autosave-pill">● Cloud Sync [ON]</span>
+                      </div>
+                      <div className="excel-subtitle-text">
+                        SKU Inventory & Stock Ledger • Certified Natural Produce & Farm Machinery
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="excel-top-actions">
+                    {/* View Switcher: Table vs Cards */}
+                    <div style={{ display: 'inline-flex', background: 'rgba(255,255,255,0.15)', borderRadius: '6px', padding: '2px', border: '1px solid rgba(255,255,255,0.25)' }}>
                       <button
-                        onClick={() => setProductSearch('')}
+                        type="button"
+                        onClick={() => setProductViewMode('table')}
                         style={{
-                          position: 'absolute',
-                          right: '12px',
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          background: 'none',
+                          padding: '4px 9px',
                           border: 'none',
-                          fontSize: '1.2rem',
-                          color: '#9CA3AF',
+                          borderRadius: '4px',
+                          fontSize: '0.76rem',
+                          fontWeight: 700,
                           cursor: 'pointer',
-                          padding: '2px',
-                          lineHeight: 1,
+                          background: productViewMode === 'table' ? '#FFFFFF' : 'transparent',
+                          color: productViewMode === 'table' ? '#0A3E22' : '#FFFFFF',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          transition: 'all 0.15s ease',
+                        }}
+                        title="Excel Table Sheet View"
+                      >
+                        <FileSpreadsheet size={13} />
+                        <span>Sheet</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProductViewMode('cards')}
+                        style={{
+                          padding: '4px 9px',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '0.76rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          background: productViewMode === 'cards' ? '#FFFFFF' : 'transparent',
+                          color: productViewMode === 'cards' ? '#0A3E22' : '#FFFFFF',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          transition: 'all 0.15s ease',
+                        }}
+                        title="Product Cards Visual View"
+                      >
+                        <LayoutGrid size={13} />
+                        <span>Cards</span>
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={exportProductsToCSV}
+                      className="btn btn-secondary btn-sm"
+                      style={{
+                        background: '#FFFFFF',
+                        color: '#15733E',
+                        border: '1px solid #D1D5DB',
+                        fontWeight: 700,
+                        fontSize: '0.78rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                      title="Export Catalog to CSV/Excel Spreadsheet"
+                    >
+                      <Download size={14} />
+                      <span className="hide-on-mobile">Export .XLSX / CSV</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={openAddProductModal}
+                      className="btn btn-primary btn-sm"
+                      style={{
+                        background: '#FFFFFF',
+                        color: '#0A3E22',
+                        border: '1px solid #FFFFFF',
+                        fontWeight: 800,
+                        fontSize: '0.78rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                      title="Add New SKU Product to Catalog"
+                    >
+                      <Plus size={15} />
+                      <span>+ Add Product</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={loadAllData}
+                      className="btn btn-secondary btn-sm"
+                      style={{
+                        background: '#FFFFFF',
+                        color: '#374151',
+                        border: '1px solid #D1D5DB',
+                        padding: '6px 10px',
+                      }}
+                      title="Reload Products from Database"
+                    >
+                      <RefreshCw size={14} className={loadingData ? 'spin' : ''} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. EXCEL RIBBON & KPI SUMMARY TILES BAR */}
+                <div className="excel-ribbon-bar">
+                  <div className="excel-kpi-tiles-grid">
+                    {/* KPI 1: Total SKUs */}
+                    <div className="excel-kpi-tile" style={{ borderLeft: '4px solid #15733E' }}>
+                      <div className="excel-kpi-formula">=COUNT(ALL_SKUS)</div>
+                      <div className="excel-kpi-value" style={{ color: '#15733E' }}>
+                        {products.length} SKUs
+                      </div>
+                      <div className="excel-kpi-subtext">Total Catalog Database</div>
+                    </div>
+
+                    {/* KPI 2: In Stock */}
+                    <div className="excel-kpi-tile" style={{ borderLeft: '4px solid #16A34A' }}>
+                      <div className="excel-kpi-formula">=SUMIF(STOCK, "IN_STOCK")</div>
+                      <div className="excel-kpi-value" style={{ color: '#16A34A' }}>
+                        {products.filter((p) => p.inStock && ((p.stockCount ?? 1) > 0)).length} Active
+                      </div>
+                      <div className="excel-kpi-subtext">Live & Available in Store</div>
+                    </div>
+
+                    {/* KPI 3: Out of Stock */}
+                    <div className="excel-kpi-tile" style={{ borderLeft: '4px solid #DC2626' }}>
+                      <div className="excel-kpi-formula">=SUMIF(STOCK, "OUT_OF_STOCK")</div>
+                      <div className="excel-kpi-value" style={{ color: '#DC2626' }}>
+                        {products.filter((p) => !p.inStock || p.stockCount === 0 || p.stockQuantity === 0).length} Depleted
+                      </div>
+                      <div className="excel-kpi-subtext">Needs Restock / Off-shelf</div>
+                    </div>
+
+                    {/* KPI 4: Rental Machinery */}
+                    <div className="excel-kpi-tile" style={{ borderLeft: '4px solid #7E22CE' }}>
+                      <div className="excel-kpi-formula">=COUNTIF(TYPE, "RENTAL")</div>
+                      <div className="excel-kpi-value" style={{ color: '#7E22CE' }}>
+                        {products.filter((p) => { const t = getProductListingType(p); return t === 'rent' || t === 'both'; }).length} Units
+                      </div>
+                      <div className="excel-kpi-subtext">🚜 Custom Hiring Machinery</div>
+                    </div>
+
+                    {/* KPI 5: Catalog Valuation */}
+                    <div className="excel-kpi-tile" style={{ borderLeft: '4px solid #0284C7' }}>
+                      <div className="excel-kpi-formula">=VALUATION(EST_STOCK)</div>
+                      <div className="excel-kpi-value" style={{ color: '#0284C7' }}>
+                        ₹{products.reduce((acc, p) => acc + ((p.price || 0) * (p.stockCount ?? (p.inStock ? 50 : 0))), 0).toLocaleString('en-IN')}
+                      </div>
+                      <div className="excel-kpi-subtext">Estimated Inventory Value</div>
+                    </div>
+                  </div>
+
+                  {/* 3. EXCEL FORMULA BAR (fx) */}
+                  <div className="excel-formula-bar-wrap">
+                    <div className="excel-formula-input-box">
+                      {/* Name Box */}
+                      <div className="excel-name-box">
+                        {selectedProductRowId
+                          ? `ROW_${products.findIndex((p) => p.id === selectedProductRowId) + 1}`
+                          : `A1:J${filteredProducts.length}`}
+                      </div>
+
+                      {/* fx badge */}
+                      <div className="excel-fx-symbol">fx</div>
+
+                      {/* Formula String Content */}
+                      <div className="excel-formula-content">
+                        {(() => {
+                          if (selectedProductRowId) {
+                            const sel = products.find((p) => p.id === selectedProductRowId);
+                            if (sel) {
+                              const t = getProductListingType(sel);
+                              const qty = sel.stockCount ?? (sel.inStock ? 50 : 0);
+                              return `=SKU("${sel.title}") | PUNJABI: "${sel.titlePunjabi || sel.title}" | PRICE: ₹${sel.price}/${sel.unit} | STOCK: ${sel.inStock && qty > 0 ? `IN_STOCK (${qty})` : 'OUT_OF_STOCK (0)'} | TYPE: ${t.toUpperCase()}`;
+                            }
+                          }
+                          const inStockCount = products.filter((p) => p.inStock && ((p.stockCount ?? 1) > 0)).length;
+                          const outStockCount = products.length - inStockCount;
+                          return `=COUNT(${products.length}_SKUs) • =SUMIF(STOCK,"IN_STOCK",${inStockCount}) • =SUMIF(STOCK,"OUT_OF_STOCK",${outStockCount}) • =VALUATION(₹${products.reduce((acc, p) => acc + ((p.price || 0) * (p.stockCount ?? (p.inStock ? 50 : 0))), 0).toLocaleString('en-IN')})`;
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. SEARCH & FILTER STRIP */}
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {/* Search Input */}
+                    <div style={{ flex: '1 1 280px', position: 'relative' }}>
+                      <Search
+                        size={16}
+                        color="#7A8B80"
+                        style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Search SKU by title, Punjabi name, category, description..."
+                        value={productSearch}
+                        onChange={(e) => setProductSearch(e.target.value)}
+                        className="form-input"
+                        style={{
+                          paddingLeft: '38px',
+                          paddingRight: productSearch ? '34px' : '12px',
+                          margin: 0,
+                          height: '38px',
+                          borderRadius: '6px',
+                          fontSize: '0.84rem',
+                          border: '1px solid #D1D5DB',
+                          background: '#FFFFFF',
+                          width: '100%',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                      {productSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setProductSearch('')}
+                          style={{
+                            position: 'absolute',
+                            right: '10px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            background: 'none',
+                            border: 'none',
+                            fontSize: '1.1rem',
+                            color: '#9CA3AF',
+                            cursor: 'pointer',
+                            padding: '2px',
+                            lineHeight: 1,
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Category Selector */}
+                    <div style={{ minWidth: '200px', position: 'relative' }}>
+                      <Filter
+                        size={14}
+                        color="#15733E"
+                        style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                      />
+                      <select
+                        value={selectedProductCategory}
+                        onChange={(e) => setSelectedProductCategory(e.target.value)}
+                        className="form-select"
+                        style={{
+                          margin: 0,
+                          paddingLeft: '32px',
+                          paddingRight: '28px',
+                          height: '38px',
+                          borderRadius: '6px',
+                          fontSize: '0.82rem',
+                          fontWeight: 600,
+                          border: '1px solid #D1D5DB',
+                          background: '#FFFFFF',
+                          cursor: 'pointer',
+                          width: '100%',
+                          boxSizing: 'border-box',
                         }}
                       >
-                        ×
+                        <option value="all">All Categories ({products.length})</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Quick Filter Pills */}
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => setProductListingFilter('all')}
+                        style={{
+                          fontSize: '0.76rem',
+                          padding: '5px 12px',
+                          borderRadius: '16px',
+                          fontWeight: 700,
+                          background: productListingFilter === 'all' ? '#0A3E22' : '#FFFFFF',
+                          color: productListingFilter === 'all' ? '#FFFFFF' : '#374151',
+                          border: productListingFilter === 'all' ? '1px solid #0A3E22' : '1px solid #D1D5DB',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        All ({products.length})
                       </button>
-                    )}
-                  </div>
-
-                  {/* Category Select with integrated icon */}
-                  <div style={{ minWidth: '220px', position: 'relative' }}>
-                    <Filter
-                      size={15}
-                      color="#15733E"
-                      style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
-                    />
-                    <select
-                      value={selectedProductCategory}
-                      onChange={(e) => setSelectedProductCategory(e.target.value)}
-                      className="form-select"
-                      style={{
-                        margin: 0,
-                        paddingLeft: '34px',
-                        paddingRight: '30px',
-                        height: '42px',
-                        borderRadius: '8px',
-                        fontSize: '0.86rem',
-                        fontWeight: 600,
-                        border: '1px solid #D1D5DB',
-                        background: '#FFFFFF',
-                        cursor: 'pointer',
-                        width: '100%',
-                        boxSizing: 'border-box',
-                      }}
-                    >
-                      <option value="all">All Categories ({products.length})</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
+                      <button
+                        type="button"
+                        onClick={() => setProductListingFilter('featured')}
+                        style={{
+                          fontSize: '0.76rem',
+                          padding: '5px 12px',
+                          borderRadius: '16px',
+                          fontWeight: 700,
+                          background: productListingFilter === 'featured' ? '#F59E0B' : '#FFFFFF',
+                          color: productListingFilter === 'featured' ? '#FFFFFF' : '#374151',
+                          border: productListingFilter === 'featured' ? '1px solid #F59E0B' : '1px solid #D1D5DB',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        ★ Featured ({products.filter((p) => p.featured).length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProductListingFilter('rent')}
+                        style={{
+                          fontSize: '0.76rem',
+                          padding: '5px 12px',
+                          borderRadius: '16px',
+                          fontWeight: 700,
+                          background: productListingFilter === 'rent' ? '#7E22CE' : '#FFFFFF',
+                          color: productListingFilter === 'rent' ? '#FFFFFF' : '#374151',
+                          border: productListingFilter === 'rent' ? '1px solid #7E22CE' : '1px solid #D1D5DB',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        🚜 Rental ({products.filter((p) => { const t = getProductListingType(p); return t === 'rent' || t === 'both'; }).length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProductListingFilter('sale')}
+                        style={{
+                          fontSize: '0.76rem',
+                          padding: '5px 12px',
+                          borderRadius: '16px',
+                          fontWeight: 700,
+                          background: productListingFilter === 'sale' ? '#15733E' : '#FFFFFF',
+                          color: productListingFilter === 'sale' ? '#FFFFFF' : '#374151',
+                          border: productListingFilter === 'sale' ? '1px solid #15733E' : '1px solid #D1D5DB',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        🌾 Produce ({products.filter((p) => { const t = getProductListingType(p); return t === 'sale' || t === 'both'; }).length})
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {/* Bottom Row: Quick Status & Rental Filter Pills */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', paddingTop: '6px', borderTop: '1px solid #F3F4F6' }}>
-                  <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.4px', marginRight: '4px' }}>
-                    Filter:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setProductListingFilter('all')}
-                    className={`btn btn-sm ${productListingFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{
-                      fontSize: '0.8rem',
-                      padding: '6px 14px',
-                      borderRadius: '20px',
-                      fontWeight: 700,
-                      background: productListingFilter === 'all' ? '#0A3E22' : '#F9FAFB',
-                      color: productListingFilter === 'all' ? '#FFFFFF' : '#374151',
-                      borderColor: productListingFilter === 'all' ? '#0A3E22' : '#E5E7EB',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    All Products ({products.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setProductListingFilter('featured')}
-                    className={`btn btn-sm ${productListingFilter === 'featured' ? 'btn-gold' : 'btn-secondary'}`}
-                    style={{
-                      fontSize: '0.8rem',
-                      padding: '6px 14px',
-                      borderRadius: '20px',
-                      fontWeight: 700,
-                      background: productListingFilter === 'featured' ? '#F59E0B' : '#F9FAFB',
-                      color: productListingFilter === 'featured' ? '#FFFFFF' : '#374151',
-                      borderColor: productListingFilter === 'featured' ? '#F59E0B' : '#E5E7EB',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    ★ Featured ({products.filter((p) => p.featured).length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setProductListingFilter('rent')}
-                    className={`btn btn-sm ${productListingFilter === 'rent' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{
-                      fontSize: '0.8rem',
-                      padding: '6px 14px',
-                      borderRadius: '20px',
-                      fontWeight: 700,
-                      background: productListingFilter === 'rent' ? '#7E22CE' : '#F9FAFB',
-                      color: productListingFilter === 'rent' ? '#FFFFFF' : '#374151',
-                      borderColor: productListingFilter === 'rent' ? '#7E22CE' : '#E5E7EB',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    🚜 Available for Rent ({products.filter((p) => getProductListingType(p) === 'rent' || getProductListingType(p) === 'both').length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setProductListingFilter('sale')}
-                    className={`btn btn-sm ${productListingFilter === 'sale' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{
-                      fontSize: '0.8rem',
-                      padding: '6px 14px',
-                      borderRadius: '20px',
-                      fontWeight: 700,
-                      background: productListingFilter === 'sale' ? '#15733E' : '#F9FAFB',
-                      color: productListingFilter === 'sale' ? '#FFFFFF' : '#374151',
-                      borderColor: productListingFilter === 'sale' ? '#15733E' : '#E5E7EB',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    🌾 Direct Sale ({products.filter((p) => getProductListingType(p) === 'sale' || getProductListingType(p) === 'both').length})
-                  </button>
-                </div>
-              </div>
+                {/* 5. WORKSHEET CONTENT: TABLE SHEET VIEW */}
+                {productViewMode === 'table' ? (
+                  <div className="excel-sheet-scroll">
+                    <table className="excel-table">
+                      <thead>
+                        {/* Column Letters Row (◢, A, B, C, D, E, F, G, H, I, J) */}
+                        <tr className="excel-col-letter-row">
+                          <th style={{ width: '40px', textAlign: 'center', background: '#E2E8F0', color: '#64748B' }}>◢</th>
+                          <th style={{ width: '60px' }}>A</th>
+                          <th style={{ minWidth: '220px' }}>B</th>
+                          <th style={{ minWidth: '160px' }}>C</th>
+                          <th style={{ width: '130px' }}>D</th>
+                          <th style={{ width: '140px' }}>E</th>
+                          <th style={{ width: '130px' }}>F</th>
+                          <th style={{ width: '150px' }}>G</th>
+                          <th style={{ width: '100px' }}>H</th>
+                          <th style={{ width: '150px' }}>I</th>
+                          <th style={{ width: '140px', textAlign: 'right' }}>J</th>
+                        </tr>
+                        {/* Column Headers Row */}
+                        <tr className="excel-col-header-row">
+                          <th style={{ width: '40px', textAlign: 'center', background: '#E2E8F0' }}>#</th>
+                          <th>Preview</th>
+                          <th>Product Title & Description</th>
+                          <th>Punjabi Title</th>
+                          <th>Category</th>
+                          <th>Listing Type</th>
+                          <th>Price & Unit</th>
+                          <th>Stock Quantity</th>
+                          <th style={{ textAlign: 'center' }}>Featured</th>
+                          <th style={{ textAlign: 'center' }}>Stock Toggle</th>
+                          <th style={{ textAlign: 'right' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredProducts.map((p, idx) => {
+                          const isSelected = selectedProductRowId === p.id;
+                          const listingType = getProductListingType(p);
+                          const isCurrentlyInStock = Boolean(p.inStock && (p.stockCount > 0 || (p.stockCount === undefined && p.stockQuantity > 0)));
+                          const currentQty = p.stockCount !== undefined && p.stockCount !== null ? p.stockCount : (p.inStock ? 50 : 0);
 
-              {/* Products Table */}
-              <div className="admin-table-container">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: '60px' }}>Image</th>
-                      <th>Product Title</th>
-                      <th>Category</th>
-                      <th>Price & Unit</th>
-                      <th>Stock Status</th>
-                      <th style={{ minWidth: '140px' }}>Featured & Rental Status</th>
-                      <th style={{ textAlign: 'right' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredProducts.map(p => (
-                      <tr key={p.id}>
-                        <td>
-                          <img
-                            src={p.imageUrl}
-                            alt={p.title}
-                            className="admin-table-product-thumb"
-                          />
-                        </td>
-                        <td>
-                          <div style={{ fontWeight: 700, color: '#122117' }}>{p.title}</div>
-                          {p.description && (
-                            <div style={{ fontSize: '0.78rem', color: '#7A8B80', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {p.description}
-                            </div>
-                          )}
-                        </td>
-                        <td>
-                          <span className="badge" style={{ background: '#F0FAF4', color: '#0A3E22' }}>
-                            {p.category?.name || 'Produce'}
-                          </span>
-                        </td>
-                        <td>
-                          <strong>₹ {p.price.toLocaleString('en-IN')}</strong>
-                          <div style={{ fontSize: '0.78rem', color: '#7A8B80' }}>/ {p.unit}</div>
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            onClick={() => openStockModal(p)}
-                            className={`badge ${p.inStock && p.stockCount > 0 ? 'badge-green' : 'badge-gold'}`}
-                            style={{ cursor: 'pointer', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                            title="Click to adjust stock quantity & in/out-of-stock status"
-                          >
-                            <Package size={12} />
-                            <span>{p.inStock && p.stockCount > 0 ? `In Stock (${p.stockCount})` : 'Out of Stock (0)'}</span>
-                          </button>
-                        </td>
-                        <td>
-                          {(() => {
-                            const listingType = getProductListingType(p);
-                            return (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                                {p.featured ? (
-                                  <span
-                                    className="badge badge-gold"
-                                    style={{
-                                      fontSize: '0.72rem',
-                                      fontWeight: 800,
-                                      padding: '2px 8px',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '4px',
-                                    }}
-                                  >
-                                    ★ FEATURED
-                                  </span>
-                                ) : (
-                                  <span style={{ fontSize: '0.74rem', color: '#7A8B80' }}>Standard</span>
+                          return (
+                            <tr
+                              key={p.id}
+                              onClick={() => setSelectedProductRowId(p.id)}
+                              style={{
+                                cursor: 'pointer',
+                                background: isSelected ? '#EFF6FF' : (idx % 2 === 1 ? '#FAFAFA' : '#FFFFFF'),
+                                transition: 'background-color 0.15s ease',
+                              }}
+                            >
+                              {/* Row Number */}
+                              <td className="excel-row-num-cell">
+                                {idx + 1}
+                              </td>
+
+                              {/* A: Thumbnail */}
+                              <td className="excel-data-cell" style={{ textAlign: 'center' }}>
+                                <img
+                                  src={p.imageUrl}
+                                  alt={p.title}
+                                  className="admin-table-product-thumb"
+                                  style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }}
+                                />
+                              </td>
+
+                              {/* B: Title & Description */}
+                              <td className="excel-data-cell">
+                                <div style={{ fontWeight: 800, color: '#111827', fontSize: '0.88rem' }}>
+                                  {p.title}
+                                </div>
+                                {p.description && (
+                                  <div style={{ fontSize: '0.74rem', color: '#6B7280', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {p.description}
+                                  </div>
                                 )}
+                              </td>
 
-                                {(listingType === 'rent' || listingType === 'both') && (
-                                  <span
-                                    className="badge"
-                                    style={{
-                                      background: listingType === 'both' ? '#E0F2FE' : '#F3E8FF',
-                                      color: listingType === 'both' ? '#0369A1' : '#7E22CE',
-                                      border: listingType === 'both' ? '1px solid #BAE6FD' : '1px solid #E9D5FF',
-                                      fontSize: '0.72rem',
-                                      fontWeight: 700,
-                                      padding: '2px 8px',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '4px',
-                                    }}
-                                  >
-                                    🚜 {listingType === 'both' ? 'Rent & Sale' : 'FOR RENT'}
+                              {/* C: Punjabi Title */}
+                              <td className="excel-data-cell">
+                                <div style={{ fontWeight: 600, color: '#15733E', fontSize: '0.84rem' }}>
+                                  {p.titlePunjabi || p.title}
+                                </div>
+                              </td>
+
+                              {/* D: Category */}
+                              <td className="excel-data-cell">
+                                <span className="badge" style={{ background: '#F0FAF4', color: '#0A3E22', border: '1px solid #D1E7DD', fontSize: '0.76rem', fontWeight: 700 }}>
+                                  {p.category?.name || 'Produce'}
+                                </span>
+                              </td>
+
+                              {/* E: Listing Type */}
+                              <td className="excel-data-cell">
+                                {listingType === 'both' && (
+                                  <span className="badge" style={{ background: '#E0F2FE', color: '#0369A1', border: '1px solid #BAE6FD', fontSize: '0.72rem', fontWeight: 700 }}>
+                                    🚜 Rent & Sale
                                   </span>
                                 )}
-
+                                {listingType === 'rent' && (
+                                  <span className="badge" style={{ background: '#F3E8FF', color: '#7E22CE', border: '1px solid #E9D5FF', fontSize: '0.72rem', fontWeight: 700 }}>
+                                    🚜 FOR RENT
+                                  </span>
+                                )}
                                 {listingType === 'sale' && (
-                                  <span
-                                    className="badge"
-                                    style={{
-                                      background: '#F0FAF4',
-                                      color: '#15733E',
-                                      border: '1px solid #D1E7DD',
-                                      fontSize: '0.72rem',
-                                      fontWeight: 600,
-                                      padding: '2px 7px',
-                                    }}
-                                  >
+                                  <span className="badge" style={{ background: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0', fontSize: '0.72rem', fontWeight: 700 }}>
                                     🌾 Direct Sale
                                   </span>
                                 )}
+                              </td>
+
+                              {/* F: Price & Unit */}
+                              <td className="excel-data-cell">
+                                <span style={{ fontWeight: 800, color: '#111827', fontSize: '0.88rem', fontFamily: 'monospace' }}>
+                                  ₹{(p.price || 0).toLocaleString('en-IN')}
+                                </span>
+                                <span style={{ fontSize: '0.76rem', color: '#6B7280', marginLeft: '4px' }}>
+                                  / {p.unit || 'Kg'}
+                                </span>
+                              </td>
+
+                              {/* G: Stock Quantity */}
+                              <td className="excel-data-cell">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); openStockModal(p); }}
+                                  style={{
+                                    border: isCurrentlyInStock ? '1px solid #BBF7D0' : '1px solid #FECACA',
+                                    background: isCurrentlyInStock ? '#ECFDF5' : '#FEF2F2',
+                                    color: isCurrentlyInStock ? '#166534' : '#DC2626',
+                                    borderRadius: '6px',
+                                    padding: '3px 8px',
+                                    fontWeight: 700,
+                                    fontSize: '0.76rem',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                  }}
+                                  title="Click to adjust quantity"
+                                >
+                                  <Package size={13} />
+                                  <span>{isCurrentlyInStock ? `${currentQty} in stock` : 'Out of Stock (0)'}</span>
+                                </button>
+                              </td>
+
+                              {/* H: Featured */}
+                              <td className="excel-data-cell" style={{ textAlign: 'center' }}>
+                                {p.featured ? (
+                                  <span style={{ color: '#D97706', fontWeight: 800, fontSize: '0.8rem' }}>★ Yes</span>
+                                ) : (
+                                  <span style={{ color: '#9CA3AF', fontSize: '0.76rem' }}>—</span>
+                                )}
+                              </td>
+
+                              {/* I: Quick 1-Click Stock Toggle Button */}
+                              <td className="excel-data-cell" style={{ textAlign: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleQuickStockToggle(p, e)}
+                                  style={{
+                                    border: 'none',
+                                    borderRadius: '14px',
+                                    padding: '4px 10px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 800,
+                                    cursor: 'pointer',
+                                    background: isCurrentlyInStock ? '#15733E' : '#EF4444',
+                                    color: '#FFFFFF',
+                                    transition: 'all 0.15s ease',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                                  }}
+                                  title={isCurrentlyInStock ? 'Click to mark OUT OF STOCK' : 'Click to mark IN STOCK'}
+                                >
+                                  {isCurrentlyInStock ? '✓ In Stock' : '✕ Out Stock'}
+                                </button>
+                              </td>
+
+                              {/* J: Actions */}
+                              <td className="excel-data-cell" style={{ textAlign: 'right' }}>
+                                <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={() => openStockModal(p)}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ padding: '4px 7px', fontSize: '0.74rem' }}
+                                    title="Adjust Stock Quantity & Status"
+                                  >
+                                    <Package size={13} color="#15733E" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditProductModal(p)}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ padding: '4px 7px', fontSize: '0.74rem' }}
+                                    title="Edit Product Details"
+                                  >
+                                    <Edit size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteProduct(p.id, p.title)}
+                                    className="btn btn-secondary btn-sm text-red"
+                                    style={{ padding: '4px 7px', fontSize: '0.74rem' }}
+                                    title="Delete Product"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+
+                        {filteredProducts.length === 0 && (
+                          <tr>
+                            <td colSpan={11} style={{ textAlign: 'center', padding: '40px', color: '#7A8B80' }}>
+                              No products found matching criteria.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  /* 6. PRODUCT CARDS GRID (ALTERNATE VIEW FOR MOBILE / VISUAL) */
+                  <div style={{ padding: '16px', background: '#F8FAFC' }}>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                        gap: '16px',
+                      }}
+                    >
+                      {filteredProducts.map((p) => {
+                        const listingType = getProductListingType(p);
+                        const isCurrentlyInStock = Boolean(p.inStock && (p.stockCount > 0 || (p.stockCount === undefined && p.stockQuantity > 0)));
+                        const currentQty = p.stockCount !== undefined && p.stockCount !== null ? p.stockCount : (p.inStock ? 50 : 0);
+
+                        return (
+                          <div
+                            key={p.id}
+                            style={{
+                              background: '#FFFFFF',
+                              borderRadius: '12px',
+                              border: '1px solid #E2E8F0',
+                              overflow: 'hidden',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                            }}
+                          >
+                            <div style={{ position: 'relative', height: '160px', background: '#F1F5F9' }}>
+                              <img
+                                src={p.imageUrl}
+                                alt={p.title}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                              <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                {p.featured && (
+                                  <span className="badge badge-gold" style={{ fontSize: '0.7rem', fontWeight: 800 }}>
+                                    ★ FEATURED
+                                  </span>
+                                )}
+                                {(listingType === 'rent' || listingType === 'both') && (
+                                  <span className="badge" style={{ background: '#7E22CE', color: '#FFFFFF', fontSize: '0.7rem', fontWeight: 700 }}>
+                                    🚜 FOR RENT
+                                  </span>
+                                )}
                               </div>
-                            );
-                          })()}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={() => openStockModal(p)}
-                              className={`btn btn-sm ${p.inStock && p.stockCount > 0 ? 'btn-secondary' : 'btn-gold'}`}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                fontWeight: 700,
-                                fontSize: '0.78rem',
-                                padding: '5px 10px',
-                                borderRadius: '6px',
-                              }}
-                              title="Adjust Stock Quantity & In/Out-of-Stock Status"
-                            >
-                              <Package size={14} color={p.inStock && p.stockCount > 0 ? '#15733E' : '#B45309'} />
-                              <span>Stock ({p.stockCount ?? (p.inStock ? 50 : 0)})</span>
-                            </button>
-                            <button
-                              onClick={() => openEditProductModal(p)}
-                              className="btn btn-secondary btn-sm"
-                              title="Edit product"
-                            >
-                              <Edit size={15} />
-                              <span className="hide-on-mobile">Edit</span>
-                            </button>
-                            <button
-                              onClick={() => handleDeleteProduct(p.id, p.title)}
-                              className="btn btn-secondary btn-sm text-red"
-                              title="Delete product"
-                            >
-                              <Trash2 size={15} />
-                            </button>
+                              <div style={{ position: 'absolute', top: '10px', right: '10px' }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleQuickStockToggle(p, e)}
+                                  style={{
+                                    border: 'none',
+                                    borderRadius: '12px',
+                                    padding: '4px 10px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 800,
+                                    cursor: 'pointer',
+                                    background: isCurrentlyInStock ? '#15733E' : '#EF4444',
+                                    color: '#FFFFFF',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                  }}
+                                >
+                                  {isCurrentlyInStock ? '✓ In Stock' : '✕ Out Stock'}
+                                </button>
+                              </div>
+                            </div>
+
+                            <div style={{ padding: '14px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                              <div>
+                                <div style={{ fontSize: '0.74rem', color: '#15733E', fontWeight: 700, textTransform: 'uppercase' }}>
+                                  {p.category?.name || 'Produce'}
+                                </div>
+                                <h4 style={{ fontSize: '1rem', fontWeight: 800, color: '#111827', margin: '4px 0 2px' }}>
+                                  {p.title}
+                                </h4>
+                                {p.titlePunjabi && (
+                                  <div style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 600, marginBottom: '6px' }}>
+                                    {p.titlePunjabi}
+                                  </div>
+                                )}
+                                {p.description && (
+                                  <p style={{ fontSize: '0.78rem', color: '#6B7280', margin: '0 0 10px', lineClamp: 2, display: '-webkit-box', WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                    {p.description}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderTop: '1px solid #F1F5F9', borderBottom: '1px solid #F1F5F9', marginBottom: '10px' }}>
+                                  <div>
+                                    <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#15733E', fontFamily: 'monospace' }}>
+                                      ₹{(p.price || 0).toLocaleString('en-IN')}
+                                    </div>
+                                    <div style={{ fontSize: '0.72rem', color: '#6B7280' }}>per {p.unit || 'Kg'}</div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => openStockModal(p)}
+                                    style={{
+                                      border: isCurrentlyInStock ? '1px solid #BBF7D0' : '1px solid #FECACA',
+                                      background: isCurrentlyInStock ? '#ECFDF5' : '#FEF2F2',
+                                      color: isCurrentlyInStock ? '#166534' : '#DC2626',
+                                      borderRadius: '6px',
+                                      padding: '4px 8px',
+                                      fontWeight: 700,
+                                      fontSize: '0.74rem',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    {isCurrentlyInStock ? `${currentQty} in stock` : 'Out of Stock'}
+                                  </button>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditProductModal(p)}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                  >
+                                    <Edit size={14} />
+                                    <span>Edit</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteProduct(p.id, p.title)}
+                                    className="btn btn-secondary btn-sm text-red"
+                                    style={{ padding: '6px 12px' }}
+                                    title="Delete product"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                        </td>
-                      </tr>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 7. BOTTOM WORKSHEET TABS BAR */}
+                <div className="excel-bottom-tabs-bar">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px', overflowX: 'auto' }}>
+                    {[
+                      { id: 'all', label: 'Sheet1: All Catalog SKUs', count: products.length },
+                      { id: 'produce', label: 'Sheet2: Direct Farm Produce', count: products.filter(p => { const t = getProductListingType(p); return t === 'sale' || t === 'both'; }).length },
+                      { id: 'rental', label: 'Sheet3: Rental Machinery', count: products.filter(p => { const t = getProductListingType(p); return t === 'rent' || t === 'both'; }).length },
+                      { id: 'out-of-stock', label: 'Sheet4: Out of Stock Alerts', count: products.filter(p => !p.inStock || p.stockCount === 0 || p.stockQuantity === 0).length },
+                    ].map((sheet) => (
+                      <button
+                        key={sheet.id}
+                        type="button"
+                        onClick={() => setProductActiveSheet(sheet.id)}
+                        className={`excel-sheet-tab-btn ${productActiveSheet === sheet.id ? 'active' : ''}`}
+                      >
+                        <FileSpreadsheet size={13} color={productActiveSheet === sheet.id ? '#15733E' : '#6B7280'} />
+                        <span>{sheet.label}</span>
+                        <span style={{
+                          padding: '1px 6px',
+                          borderRadius: '10px',
+                          fontSize: '0.66rem',
+                          fontWeight: 800,
+                          background: productActiveSheet === sheet.id ? '#15733E' : '#E5E7EB',
+                          color: productActiveSheet === sheet.id ? '#FFFFFF' : '#4B5563',
+                        }}>
+                          {sheet.count}
+                        </span>
+                      </button>
                     ))}
-                    {filteredProducts.length === 0 && (
-                      <tr>
-                        <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#7A8B80' }}>
-                          No products found matching criteria.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.72rem', color: '#6B7280', flexShrink: 0 }}>
+                    <span className="hide-on-mobile">Ready: 100%</span>
+                    <span style={{ color: '#15733E', fontWeight: 700 }}>● Cloud Sync [ON]</span>
+                    <span className="hide-on-mobile" style={{ color: '#4B5563' }}>AutoSave: ACTIVE</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -4163,6 +4837,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
             <div className="admin-tab-view" style={{ padding: 0, maxWidth: '100%' }}>
               {/* Excel Workbook Shell Window Container */}
               <div
+                className="admin-excel-workbook"
                 style={{
                   background: '#FFFFFF',
                   borderRadius: '12px',
@@ -4173,6 +4848,77 @@ export default function AdminPortalPage({ onNavigateHome }) {
                   flexDirection: 'column',
                 }}
               >
+                {/* 1. EXCEL WORKBOOK GREEN HEADER BAR */}
+                <div className="excel-top-header-bar">
+                  <div className="excel-top-title-lockup">
+                    <div className="excel-icon-box">X</div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span className="excel-title-text">SachiKheti_Sales_Ledger_2026.xlsx</span>
+                        <span className="excel-autosave-pill">● Cloud AutoSave [ON]</span>
+                      </div>
+                      <div className="excel-subtitle-text">
+                        Financial Audit Ledger • Direct Farm Produce & Machinery Rental Hiring Accounts
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="excel-top-actions">
+                    <button
+                      type="button"
+                      onClick={exportHistoryToCSV}
+                      className="btn btn-secondary btn-sm"
+                      style={{
+                        background: '#FFFFFF',
+                        color: '#15733E',
+                        border: '1px solid #D1D5DB',
+                        fontWeight: 700,
+                        fontSize: '0.78rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                      title="Download complete ledger as CSV/Excel spreadsheet"
+                    >
+                      <Download size={14} />
+                      <span>Export .XLSX / CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('customer-store'); }}
+                      className="btn btn-primary btn-sm"
+                      style={{
+                        background: '#FFFFFF',
+                        color: '#0A3E22',
+                        border: '1px solid #FFFFFF',
+                        fontWeight: 800,
+                        fontSize: '0.78rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                      title="Switch to Customer Store & POS to issue new bill"
+                    >
+                      <Plus size={14} />
+                      <span>+ Insert POS Bill</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={loadAllData}
+                      className="btn btn-secondary btn-sm"
+                      style={{
+                        background: '#FFFFFF',
+                        color: '#374151',
+                        border: '1px solid #D1D5DB',
+                        padding: '6px 10px',
+                      }}
+                      title="Refresh Ledger from Database"
+                    >
+                      <RefreshCw size={14} className={loadingData ? 'spin' : ''} />
+                    </button>
+                  </div>
+                </div>
+
                 {/* 2. EXCEL RIBBON TOOLBAR & KPI SUMMARY BAR */}
                 <div
                   style={{
@@ -4484,7 +5230,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                           let parsedItems = [];
                           try {
                             parsedItems = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
-                          } catch (e) {}
+                          } catch (e) { }
 
                           const isSelected = selectedHistoryRowId === o.id;
 
@@ -4779,7 +5525,7 @@ export default function AdminPortalPage({ onNavigateHome }) {
                         let parsedItems = [];
                         try {
                           parsedItems = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
-                        } catch (e) {}
+                        } catch (e) { }
 
                         return (
                           <div key={o.id} className="admin-order-card" style={{ borderLeft: '4px solid #15733E' }}>
@@ -6174,547 +6920,547 @@ export default function AdminPortalPage({ onNavigateHome }) {
                     borderRadius: '10px',
                   }}
                 >
-              <button
-                type="button"
-                onClick={() => {
-                  setProductForm((prev) => ({
-                    ...prev,
-                    productType: 'produce',
-                    isForSale: true,
-                    isForRent: false,
-                    unit: prev.unit.includes('Acre') || prev.unit.includes('Hour') ? '1 kg' : prev.unit,
-                    stockCount: prev.stockCount === 1 ? 50 : prev.stockCount,
-                  }));
-                }}
-                style={{
-                  flex: 1,
-                  padding: '9px 12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: '0.84rem',
-                  cursor: 'pointer',
-                  background: productForm.productType === 'produce' ? '#15733E' : 'transparent',
-                  color: productForm.productType === 'produce' ? '#fff' : '#4B6354',
-                  boxShadow: productForm.productType === 'produce' ? '0 2px 6px rgba(21,115,62,0.25)' : 'none',
-                  transition: 'all 0.2s',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                }}
-              >
-                <span>🌾 Farm Produce & Dairy (Ghee, Sweets, Pulses, Spices, Honey)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setProductForm((prev) => ({
-                    ...prev,
-                    productType: 'machinery',
-                    isForRent: true,
-                    unit: prev.unit === '1 kg' || prev.unit === '500 ml' ? '1 Acre' : prev.unit,
-                    stockCount: prev.stockCount === 50 ? 1 : prev.stockCount,
-                    workingCapacity: prev.workingCapacity || '1 Acre',
-                  }));
-                }}
-                style={{
-                  flex: 1,
-                  padding: '9px 12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: '0.84rem',
-                  cursor: 'pointer',
-                  background: productForm.productType === 'machinery' ? '#15733E' : 'transparent',
-                  color: productForm.productType === 'machinery' ? '#fff' : '#4B6354',
-                  boxShadow: productForm.productType === 'machinery' ? '0 2px 6px rgba(21,115,62,0.25)' : 'none',
-                  transition: 'all 0.2s',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                }}
-              >
-                <span>🚜 Agricultural Machinery & Equipment (Rent / Sale)</span>
-              </button>
-            </div>
-
-              {/* Product Titles: English & Punjabi */}
-              <div className="checkout-grid-2col">
-                <div className="form-group">
-                  <label className="form-label">Product / Equipment Name (English) *</label>
-                  <input
-                    type="text"
-                    required
-                    value={productForm.title}
-                    onChange={(e) => setProductForm({ ...productForm, title: e.target.value })}
-                    className="form-input"
-                    placeholder={
-                      productForm.productType === 'machinery'
-                        ? 'e.g. Basant Potato Digger or Rice Seeder'
-                        : 'e.g. Desi Ghee or Khoya Burfi'
-                    }
-                  />
-                </div>
-
-                <div className="form-group">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label className="form-label" style={{ margin: 0 }}>Product Name (Punjabi / ਪੰਜਾਬੀ)</label>
-                    {productForm.title && !productForm.titlePunjabi && (
-                      <button
-                        type="button"
-                        onClick={() => setProductForm({ ...productForm, titlePunjabi: productForm.title })}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#15733E',
-                          fontSize: '0.72rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Copy English
-                      </button>
-                    )}
-                  </div>
-                  <input
-                    type="text"
-                    value={productForm.titlePunjabi}
-                    onChange={(e) => setProductForm({ ...productForm, titlePunjabi: e.target.value })}
-                    className="form-input font-gurmukhi"
-                    placeholder="e.g. ਦੇਸੀ ਘਿਓ / ਬਸੰਤ ਪੋਟੈਟੋ ਡਿੱਗਰ"
-                  />
-                </div>
-              </div>
-
-              {/* Category & Listing Options */}
-              <div className="form-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label className="form-label" style={{ margin: 0 }}>Catalog Category *</label>
                   <button
                     type="button"
                     onClick={() => {
-                      setShowCategoryModal(true);
-                      setEditingCategory(null);
-                      setCategoryForm({
-                        name: '',
-                        namePunjabi: '',
-                        slug: '',
-                        description: '',
-                        icon: 'package',
-                        imageUrl: '',
-                      });
+                      setProductForm((prev) => ({
+                        ...prev,
+                        productType: 'produce',
+                        isForSale: true,
+                        isForRent: false,
+                        unit: prev.unit.includes('Acre') || prev.unit.includes('Hour') ? '1 kg' : prev.unit,
+                        stockCount: prev.stockCount === 1 ? 50 : prev.stockCount,
+                      }));
                     }}
                     style={{
-                      background: 'none',
+                      flex: 1,
+                      padding: '9px 12px',
+                      borderRadius: '8px',
                       border: 'none',
-                      color: '#15733E',
-                      fontSize: '0.75rem',
                       fontWeight: 700,
+                      fontSize: '0.84rem',
                       cursor: 'pointer',
+                      background: productForm.productType === 'produce' ? '#15733E' : 'transparent',
+                      color: productForm.productType === 'produce' ? '#fff' : '#4B6354',
+                      boxShadow: productForm.productType === 'produce' ? '0 2px 6px rgba(21,115,62,0.25)' : 'none',
+                      transition: 'all 0.2s',
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '4px',
+                      justifyContent: 'center',
+                      gap: '6px',
                     }}
                   >
-                    <Plus size={13} />
-                    <span>+ New Category</span>
+                    <span>🌾 Farm Produce & Dairy (Ghee, Sweets, Pulses, Spices, Honey)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProductForm((prev) => ({
+                        ...prev,
+                        productType: 'machinery',
+                        isForRent: true,
+                        unit: prev.unit === '1 kg' || prev.unit === '500 ml' ? '1 Acre' : prev.unit,
+                        stockCount: prev.stockCount === 50 ? 1 : prev.stockCount,
+                        workingCapacity: prev.workingCapacity || '1 Acre',
+                      }));
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      fontWeight: 700,
+                      fontSize: '0.84rem',
+                      cursor: 'pointer',
+                      background: productForm.productType === 'machinery' ? '#15733E' : 'transparent',
+                      color: productForm.productType === 'machinery' ? '#fff' : '#4B6354',
+                      boxShadow: productForm.productType === 'machinery' ? '0 2px 6px rgba(21,115,62,0.25)' : 'none',
+                      transition: 'all 0.2s',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <span>🚜 Agricultural Machinery & Equipment (Rent / Sale)</span>
                   </button>
                 </div>
-                <select
-                  required
-                  value={productForm.categoryId}
-                  onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
-                  className="form-select"
-                >
-                  <option value="">Select Category...</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} {c.namePunjabi ? `(${c.namePunjabi})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
 
-              {/* Listing Availability & Nature Checkboxes (As required by owner: Rent, Sale, In-Stock, Featured) */}
-              <div
-                style={{
-                  background: '#FAF9F3',
-                  border: '1px solid rgba(21, 115, 62, 0.2)',
-                  borderRadius: '10px',
-                  padding: '12px 16px',
-                  marginBottom: '16px',
-                }}
-              >
-                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1B2E23', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Availability & Operational Status
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+                {/* Product Titles: English & Punjabi */}
+                <div className="checkout-grid-2col">
+                  <div className="form-group">
+                    <label className="form-label">Product / Equipment Name (English) *</label>
                     <input
-                      type="checkbox"
-                      checked={productForm.isForSale}
-                      onChange={(e) => setProductForm({ ...productForm, isForSale: e.target.checked })}
-                      style={{ width: '17px', height: '17px', accentColor: '#15733E' }}
+                      type="text"
+                      required
+                      value={productForm.title}
+                      onChange={(e) => setProductForm({ ...productForm, title: e.target.value })}
+                      className="form-input"
+                      placeholder={
+                        productForm.productType === 'machinery'
+                          ? 'e.g. Basant Potato Digger or Rice Seeder'
+                          : 'e.g. Desi Ghee or Khoya Burfi'
+                      }
                     />
-                    <span>Available for Direct Sale</span>
-                  </label>
+                  </div>
 
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: '#15733E' }}>
+                  <div className="form-group">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="form-label" style={{ margin: 0 }}>Product Name (Punjabi / ਪੰਜਾਬੀ)</label>
+                      {productForm.title && !productForm.titlePunjabi && (
+                        <button
+                          type="button"
+                          onClick={() => setProductForm({ ...productForm, titlePunjabi: productForm.title })}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#15733E',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Copy English
+                        </button>
+                      )}
+                    </div>
                     <input
-                      type="checkbox"
-                      checked={productForm.isForRent}
-                      onChange={(e) => setProductForm({ ...productForm, isForRent: e.target.checked })}
-                      style={{ width: '17px', height: '17px', accentColor: '#15733E' }}
+                      type="text"
+                      value={productForm.titlePunjabi}
+                      onChange={(e) => setProductForm({ ...productForm, titlePunjabi: e.target.value })}
+                      className="form-input font-gurmukhi"
+                      placeholder="e.g. ਦੇਸੀ ਘਿਓ / ਬਸੰਤ ਪੋਟੈਟੋ ਡਿੱਗਰ"
                     />
-                    <span>Available for Rent / Custom Hiring</span>
-                  </label>
-
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
-                    <input
-                      type="checkbox"
-                      checked={productForm.inStock}
-                      onChange={(e) => setProductForm({ ...productForm, inStock: e.target.checked })}
-                      style={{ width: '17px', height: '17px', accentColor: '#15733E' }}
-                    />
-                    <span>Mark as In-Stock / Available</span>
-                  </label>
-
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: '#B46F00' }}>
-                    <input
-                      type="checkbox"
-                      checked={productForm.featured}
-                      onChange={(e) => setProductForm({ ...productForm, featured: e.target.checked })}
-                      style={{ width: '17px', height: '17px', accentColor: '#B46F00' }}
-                    />
-                    <span>Mark as Featured Product</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Pack Size / Working Capacity / Unit Specification */}
-              <div className="form-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <label className="form-label" style={{ margin: 0 }}>
-                    Pack Size / Working Capacity / Unit *
-                  </label>
-                  <span style={{ fontSize: '0.72rem', color: '#7A8B80' }}>
-                    Pick from dropdown, click a chip, or type custom
-                  </span>
+                  </div>
                 </div>
 
-                {/* Dropdown with all owner options */}
-                <select
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      setProductForm({ ...productForm, unit: e.target.value });
-                    }
-                  }}
-                  className="form-select"
-                  style={{ marginBottom: '8px', fontSize: '0.85rem' }}
-                >
-                  <option value="">-- Quick Select Pack Size or Working Capacity --</option>
-                  <optgroup label="Farm Produce & Dairy Pack Sizes">
-                    <option value="500 ml">500 ml (Desi Ghee, Natural Honey)</option>
-                    <option value="1 kg">1 kg (Khoya Burfi, Paneer, Khoya, Milkcake, Green Moong)</option>
-                    <option value="500 g">500 g (Natural Honey, Dal, etc.)</option>
-                    <option value="200 g">200 g (Haldi / Turmeric, Red Chilli Powder)</option>
-                    <option value="250 g">250 g</option>
-                    <option value="100 g">100 g</option>
-                    <option value="2 kg">2 kg</option>
-                    <option value="5 kg">5 kg</option>
-                    <option value="10 kg">10 kg</option>
-                    <option value="1 Litre">1 Litre</option>
-                  </optgroup>
-                  <optgroup label="Agricultural Machinery & Rental Capacities">
-                    <option value="1 Acre">1 Acre (Potato Digger, Rice Seeder, Potato Planter, Spray Boom, Rice Planter)</option>
-                    <option value="1 Hour">1 Hour (Laser Land Leveler, Harrow)</option>
-                    <option value="24 Hours">24 Hours (Massey Ferguson 9500 Tractor Hire)</option>
-                    <option value="Per Acre">Per Acre</option>
-                    <option value="Per Hour">Per Hour</option>
-                    <option value="Per Day">Per Day</option>
-                    <option value="Per Trip">Per Trip</option>
-                    <option value="1 Machine">1 Machine (Direct Sale)</option>
-                  </optgroup>
-                </select>
-
-                {/* Fast Clickable Chips */}
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
-                  {['500 ml', '1 kg', '500 g', '200 g', '1 Acre', '1 Hour', '24 Hours', 'Per Day'].map((chip) => (
+                {/* Category & Listing Options */}
+                <div className="form-group">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label className="form-label" style={{ margin: 0 }}>Catalog Category *</label>
                     <button
-                      key={chip}
                       type="button"
-                      onClick={() => setProductForm({ ...productForm, unit: chip })}
+                      onClick={() => {
+                        setShowCategoryModal(true);
+                        setEditingCategory(null);
+                        setCategoryForm({
+                          name: '',
+                          namePunjabi: '',
+                          slug: '',
+                          description: '',
+                          icon: 'package',
+                          imageUrl: '',
+                        });
+                      }}
                       style={{
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        border: productForm.unit === chip ? '1px solid #15733E' : '1px solid #D1D5DB',
-                        background: productForm.unit === chip ? '#E8F5E9' : '#fff',
-                        color: productForm.unit === chip ? '#15733E' : '#374151',
-                        fontSize: '0.74rem',
-                        fontWeight: 600,
+                        background: 'none',
+                        border: 'none',
+                        color: '#15733E',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
                         cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
                       }}
                     >
-                      {chip}
+                      <Plus size={13} />
+                      <span>+ New Category</span>
                     </button>
-                  ))}
-                </div>
-
-                {/* Editable Input Field */}
-                <input
-                  type="text"
-                  required
-                  value={productForm.unit}
-                  onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })}
-                  className="form-input"
-                  placeholder="e.g. 500 ml, 1 kg, 1 Acre, 1 Hour, 24 Hours, Per Day"
-                />
-              </div>
-
-              {/* Price & Stock Quantity */}
-              <div className="checkout-grid-2col">
-                <div className="form-group">
-                  <label className="form-label">Price in ₹ (INR) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
+                  </div>
+                  <select
                     required
-                    value={productForm.price}
-                    onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
-                    className="form-input"
-                    placeholder="e.g. 600, 451, 2500, 900"
-                  />
-                  {productForm.price && (
-                    <div style={{ fontSize: '0.76rem', color: '#15733E', marginTop: '4px', fontWeight: 600 }}>
-                      Rate: ₹{parseFloat(productForm.price).toLocaleString('en-IN')} / {productForm.unit || 'unit'}
-                      {productForm.isForRent && !productForm.isForSale && ' (Rental)'}
-                      {productForm.isForRent && productForm.isForSale && ' (Rent or Sale)'}
-                    </div>
-                  )}
+                    value={productForm.categoryId}
+                    onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
+                    className="form-select"
+                  >
+                    <option value="">Select Category...</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.namePunjabi ? `(${c.namePunjabi})` : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Available Stock / Units</label>
-                  <input
-                    type="number"
-                    value={productForm.stockCount}
-                    onChange={(e) => setProductForm({ ...productForm, stockCount: e.target.value })}
-                    className="form-input"
-                    placeholder="e.g. 50 (Produce) or 1 (Machinery)"
-                  />
-                </div>
-              </div>
-
-              {/* Machinery Specifications (Shown when Machinery is selected or item is For Rent) */}
-              {(productForm.productType === 'machinery' || productForm.isForRent) && (
+                {/* Listing Availability & Nature Checkboxes (As required by owner: Rent, Sale, In-Stock, Featured) */}
                 <div
                   style={{
-                    background: '#F0F9FF',
-                    border: '1px solid #BAE6FD',
+                    background: '#FAF9F3',
+                    border: '1px solid rgba(21, 115, 62, 0.2)',
                     borderRadius: '10px',
-                    padding: '14px',
+                    padding: '12px 16px',
                     marginBottom: '16px',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', fontWeight: 700, color: '#0369A1', marginBottom: '10px' }}>
-                    <span>🚜 Machinery Specifications & Rental Terms</span>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1B2E23', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Availability & Operational Status
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={productForm.isForSale}
+                        onChange={(e) => setProductForm({ ...productForm, isForSale: e.target.checked })}
+                        style={{ width: '17px', height: '17px', accentColor: '#15733E' }}
+                      />
+                      <span>Available for Direct Sale</span>
+                    </label>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: '#15733E' }}>
+                      <input
+                        type="checkbox"
+                        checked={productForm.isForRent}
+                        onChange={(e) => setProductForm({ ...productForm, isForRent: e.target.checked })}
+                        style={{ width: '17px', height: '17px', accentColor: '#15733E' }}
+                      />
+                      <span>Available for Rent / Custom Hiring</span>
+                    </label>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={productForm.inStock}
+                        onChange={(e) => setProductForm({ ...productForm, inStock: e.target.checked })}
+                        style={{ width: '17px', height: '17px', accentColor: '#15733E' }}
+                      />
+                      <span>Mark as In-Stock / Available</span>
+                    </label>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: '#B46F00' }}>
+                      <input
+                        type="checkbox"
+                        checked={productForm.featured}
+                        onChange={(e) => setProductForm({ ...productForm, featured: e.target.checked })}
+                        style={{ width: '17px', height: '17px', accentColor: '#B46F00' }}
+                      />
+                      <span>Mark as Featured Product</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Pack Size / Working Capacity / Unit Specification */}
+                <div className="form-group">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label className="form-label" style={{ margin: 0 }}>
+                      Pack Size / Working Capacity / Unit *
+                    </label>
+                    <span style={{ fontSize: '0.72rem', color: '#7A8B80' }}>
+                      Pick from dropdown, click a chip, or type custom
+                    </span>
                   </div>
 
-                  <div className="checkout-grid-2col" style={{ marginBottom: '10px' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontSize: '0.78rem' }}>Working Capacity</label>
-                      <input
-                        type="text"
-                        value={productForm.workingCapacity}
-                        onChange={(e) => setProductForm({ ...productForm, workingCapacity: e.target.value })}
-                        className="form-input"
-                        placeholder="e.g. 1 Acre, 2 Acres, Per Acre"
-                      />
-                    </div>
+                  {/* Dropdown with all owner options */}
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setProductForm({ ...productForm, unit: e.target.value });
+                      }
+                    }}
+                    className="form-select"
+                    style={{ marginBottom: '8px', fontSize: '0.85rem' }}
+                  >
+                    <option value="">-- Quick Select Pack Size or Working Capacity --</option>
+                    <optgroup label="Farm Produce & Dairy Pack Sizes">
+                      <option value="500 ml">500 ml (Desi Ghee, Natural Honey)</option>
+                      <option value="1 kg">1 kg (Khoya Burfi, Paneer, Khoya, Milkcake, Green Moong)</option>
+                      <option value="500 g">500 g (Natural Honey, Dal, etc.)</option>
+                      <option value="200 g">200 g (Haldi / Turmeric, Red Chilli Powder)</option>
+                      <option value="250 g">250 g</option>
+                      <option value="100 g">100 g</option>
+                      <option value="2 kg">2 kg</option>
+                      <option value="5 kg">5 kg</option>
+                      <option value="10 kg">10 kg</option>
+                      <option value="1 Litre">1 Litre</option>
+                    </optgroup>
+                    <optgroup label="Agricultural Machinery & Rental Capacities">
+                      <option value="1 Acre">1 Acre (Potato Digger, Rice Seeder, Potato Planter, Spray Boom, Rice Planter)</option>
+                      <option value="1 Hour">1 Hour (Laser Land Leveler, Harrow)</option>
+                      <option value="24 Hours">24 Hours (Massey Ferguson 9500 Tractor Hire)</option>
+                      <option value="Per Acre">Per Acre</option>
+                      <option value="Per Hour">Per Hour</option>
+                      <option value="Per Day">Per Day</option>
+                      <option value="Per Trip">Per Trip</option>
+                      <option value="1 Machine">1 Machine (Direct Sale)</option>
+                    </optgroup>
+                  </select>
 
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontSize: '0.78rem' }}>Working Duration / Availability</label>
-                      <input
-                        type="text"
-                        value={productForm.workingDuration}
-                        onChange={(e) => setProductForm({ ...productForm, workingDuration: e.target.value })}
-                        className="form-input"
-                        placeholder="e.g. 1 Hour, 24 Hours, Full Day"
-                      />
-                    </div>
+                  {/* Fast Clickable Chips */}
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                    {['500 ml', '1 kg', '500 g', '200 g', '1 Acre', '1 Hour', '24 Hours', 'Per Day'].map((chip) => (
+                      <button
+                        key={chip}
+                        type="button"
+                        onClick={() => setProductForm({ ...productForm, unit: chip })}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          border: productForm.unit === chip ? '1px solid #15733E' : '1px solid #D1D5DB',
+                          background: productForm.unit === chip ? '#E8F5E9' : '#fff',
+                          color: productForm.unit === chip ? '#15733E' : '#374151',
+                          fontSize: '0.74rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {chip}
+                      </button>
+                    ))}
                   </div>
 
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.78rem' }}>Machine Type / Tractor Compatibility</label>
+                  {/* Editable Input Field */}
+                  <input
+                    type="text"
+                    required
+                    value={productForm.unit}
+                    onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })}
+                    className="form-input"
+                    placeholder="e.g. 500 ml, 1 kg, 1 Acre, 1 Hour, 24 Hours, Per Day"
+                  />
+                </div>
+
+                {/* Price & Stock Quantity */}
+                <div className="checkout-grid-2col">
+                  <div className="form-group">
+                    <label className="form-label">Price in ₹ (INR) *</label>
                     <input
-                      type="text"
-                      value={productForm.machineType}
-                      onChange={(e) => setProductForm({ ...productForm, machineType: e.target.value })}
+                      type="number"
+                      step="0.01"
+                      required
+                      value={productForm.price}
+                      onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
                       className="form-input"
-                      placeholder="e.g. Tractor-Operated, Laser-Guided, Tractor-Mounted, 50+ HP Tractor"
+                      placeholder="e.g. 600, 451, 2500, 900"
+                    />
+                    {productForm.price && (
+                      <div style={{ fontSize: '0.76rem', color: '#15733E', marginTop: '4px', fontWeight: 600 }}>
+                        Rate: ₹{parseFloat(productForm.price).toLocaleString('en-IN')} / {productForm.unit || 'unit'}
+                        {productForm.isForRent && !productForm.isForSale && ' (Rental)'}
+                        {productForm.isForRent && productForm.isForSale && ' (Rent or Sale)'}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Available Stock / Units</label>
+                    <input
+                      type="number"
+                      value={productForm.stockCount}
+                      onChange={(e) => setProductForm({ ...productForm, stockCount: e.target.value })}
+                      className="form-input"
+                      placeholder="e.g. 50 (Produce) or 1 (Machinery)"
                     />
                   </div>
                 </div>
-              )}
 
-              {/* Product Image & Supabase Storage */}
-              <div className="form-group">
-                <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Product Image *</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowSupabaseModal(true)}
+                {/* Machinery Specifications (Shown when Machinery is selected or item is For Rent) */}
+                {(productForm.productType === 'machinery' || productForm.isForRent) && (
+                  <div
                     style={{
-                      background: 'none',
-                      border: 'none',
-                      color: supabaseConfig.isConfigured ? '#15733E' : '#B46F00',
-                      fontSize: '0.76rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
+                      background: '#F0F9FF',
+                      border: '1px solid #BAE6FD',
+                      borderRadius: '10px',
+                      padding: '14px',
+                      marginBottom: '16px',
                     }}
                   >
-                    <Database size={12} />
-                    {supabaseConfig.isConfigured ? 'Supabase CDN Active' : '⚡ Connect Supabase'}
-                  </button>
-                </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', fontWeight: 700, color: '#0369A1', marginBottom: '10px' }}>
+                      <span>🚜 Machinery Specifications & Rental Terms</span>
+                    </div>
 
-                {/* Supabase Upload Zone */}
-                <div
-                  style={{
-                    border: '2px dashed rgba(21, 115, 62, 0.25)',
-                    borderRadius: '12px',
-                    padding: '14px',
-                    background: '#FAF9F3',
-                    marginBottom: '10px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                    {productForm.imageUrl && (
-                      <img
-                        src={productForm.imageUrl}
-                        alt="Preview"
-                        style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px', border: '2px solid #15733E', flexShrink: 0 }}
-                      />
-                    )}
-                    <div style={{ textAlign: 'left', flex: 1 }}>
-                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <label
-                          className="btn btn-secondary btn-sm"
-                          style={{
-                            cursor: uploadingProductImg ? 'not-allowed' : 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            opacity: uploadingProductImg ? 0.6 : 1,
-                          }}
-                        >
-                          <UploadCloud size={16} color="#15733E" />
-                          <span>{uploadingProductImg ? 'Uploading...' : 'Upload Image to Supabase'}</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleUploadProductImg}
-                            disabled={uploadingProductImg}
-                            style={{ display: 'none' }}
-                          />
-                        </label>
+                    <div className="checkout-grid-2col" style={{ marginBottom: '10px' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.78rem' }}>Working Capacity</label>
+                        <input
+                          type="text"
+                          value={productForm.workingCapacity}
+                          onChange={(e) => setProductForm({ ...productForm, workingCapacity: e.target.value })}
+                          className="form-input"
+                          placeholder="e.g. 1 Acre, 2 Acres, Per Acre"
+                        />
                       </div>
 
-                      {productUploadStatus && (
-                        <div
-                          style={{
-                            fontSize: '0.78rem',
-                            marginTop: '6px',
-                            fontWeight: 600,
-                            color: productUploadStatus.includes('Error') || productUploadStatus.includes('failed') ? '#DC2626' : '#15733E',
-                          }}
-                        >
-                          {productUploadStatus}
-                        </div>
-                      )}
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.78rem' }}>Working Duration / Availability</label>
+                        <input
+                          type="text"
+                          value={productForm.workingDuration}
+                          onChange={(e) => setProductForm({ ...productForm, workingDuration: e.target.value })}
+                          className="form-input"
+                          placeholder="e.g. 1 Hour, 24 Hours, Full Day"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.78rem' }}>Machine Type / Tractor Compatibility</label>
+                      <input
+                        type="text"
+                        value={productForm.machineType}
+                        onChange={(e) => setProductForm({ ...productForm, machineType: e.target.value })}
+                        className="form-input"
+                        placeholder="e.g. Tractor-Operated, Laser-Guided, Tractor-Mounted, 50+ HP Tractor"
+                      />
                     </div>
                   </div>
+                )}
+
+                {/* Product Image & Supabase Storage */}
+                <div className="form-group">
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Product Image *</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowSupabaseModal(true)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: supabaseConfig.isConfigured ? '#15733E' : '#B46F00',
+                        fontSize: '0.76rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <Database size={12} />
+                      {supabaseConfig.isConfigured ? 'Supabase CDN Active' : '⚡ Connect Supabase'}
+                    </button>
+                  </label>
+
+                  {/* Supabase Upload Zone */}
+                  <div
+                    style={{
+                      border: '2px dashed rgba(21, 115, 62, 0.25)',
+                      borderRadius: '12px',
+                      padding: '14px',
+                      background: '#FAF9F3',
+                      marginBottom: '10px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                      {productForm.imageUrl && (
+                        <img
+                          src={productForm.imageUrl}
+                          alt="Preview"
+                          style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px', border: '2px solid #15733E', flexShrink: 0 }}
+                        />
+                      )}
+                      <div style={{ textAlign: 'left', flex: 1 }}>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <label
+                            className="btn btn-secondary btn-sm"
+                            style={{
+                              cursor: uploadingProductImg ? 'not-allowed' : 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              opacity: uploadingProductImg ? 0.6 : 1,
+                            }}
+                          >
+                            <UploadCloud size={16} color="#15733E" />
+                            <span>{uploadingProductImg ? 'Uploading...' : 'Upload Image to Supabase'}</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleUploadProductImg}
+                              disabled={uploadingProductImg}
+                              style={{ display: 'none' }}
+                            />
+                          </label>
+                        </div>
+
+                        {productUploadStatus && (
+                          <div
+                            style={{
+                              fontSize: '0.78rem',
+                              marginTop: '6px',
+                              fontWeight: 600,
+                              color: productUploadStatus.includes('Error') || productUploadStatus.includes('failed') ? '#DC2626' : '#15733E',
+                            }}
+                          >
+                            {productUploadStatus}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <input
+                    type="text"
+                    required
+                    value={productForm.imageUrl}
+                    onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
+                    className="form-input"
+                    placeholder="Image URL (auto-filled on upload above)"
+                  />
                 </div>
 
-                <input
-                  type="text"
-                  required
-                  value={productForm.imageUrl}
-                  onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
-                  className="form-input"
-                  placeholder="Image URL (auto-filled on upload above)"
-                />
+                {/* Product Description */}
+                <div className="form-group">
+                  <label className="form-label">Product Description</label>
+                  <textarea
+                    rows={3}
+                    value={productForm.description}
+                    onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
+                    className="form-textarea"
+                    placeholder={
+                      productForm.productType === 'machinery'
+                        ? 'e.g. Tractor-operated potato digging and harvesting machine with high efficiency and uniform field operations.'
+                        : 'e.g. Pure, rich and aromatic desi ghee with a natural golden colour. Perfect for traditional cooking...'
+                    }
+                  />
+                </div>
               </div>
 
-              {/* Product Description */}
-              <div className="form-group">
-                <label className="form-label">Product Description</label>
-                <textarea
-                  rows={3}
-                  value={productForm.description}
-                  onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-                  className="form-textarea"
-                  placeholder={
-                    productForm.productType === 'machinery'
-                      ? 'e.g. Tractor-operated potato digging and harvesting machine with high efficiency and uniform field operations.'
-                      : 'e.g. Pure, rich and aromatic desi ghee with a natural golden colour. Perfect for traditional cooking...'
-                  }
-                />
+              {/* Sticky Action Footer */}
+              <div
+                style={{
+                  padding: '14px 24px',
+                  borderTop: '1px solid #E5E7EB',
+                  background: '#F9FAFB',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{ fontSize: '0.8rem', color: '#7A8B80' }}>
+                  {editingProduct ? '⚡ Real-time socket sync active' : '🌾 Instant storefront visibility'}
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowProductModal(false)}
+                    className="btn btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingProduct}
+                    className="btn btn-primary"
+                  >
+                    {savingProduct ? (
+                      <>
+                        <RefreshCw size={16} className="spin" />
+                        <span>Saving to Database...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle size={16} />
+                        <span>{editingProduct ? 'Save Changes' : 'Create Product'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
-
-            {/* Sticky Action Footer */}
-            <div
-              style={{
-                padding: '14px 24px',
-                borderTop: '1px solid #E5E7EB',
-                background: '#F9FAFB',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <div style={{ fontSize: '0.8rem', color: '#7A8B80' }}>
-                {editingProduct ? '⚡ Real-time socket sync active' : '🌾 Instant storefront visibility'}
-              </div>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowProductModal(false)}
-                  className="btn btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingProduct}
-                  className="btn btn-primary"
-                >
-                  {savingProduct ? (
-                    <>
-                      <RefreshCw size={16} className="spin" />
-                      <span>Saving to Database...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle size={16} />
-                      <span>{editingProduct ? 'Save Changes' : 'Create Product'}</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </form>
+            </form>
+          </div>
         </div>
-      </div>
-    )}
+      )}
 
       {/* ==================================================== */}
       {/* ADD / EDIT CATEGORY MODAL                            */}
